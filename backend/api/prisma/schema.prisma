@@ -1,0 +1,349 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum InstitutionType {
+  BANK
+  NBFC
+  PLATFORM
+}
+
+enum InstitutionStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  PLATFORM_SUPER_ADMIN
+  INSTITUTION_ADMIN
+  KYC_OFFICER
+  COMPLIANCE_OFFICER
+  LOAN_OFFICER
+  BUSINESS_OWNER
+  BUSINESS_EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  LOCKED
+  DISABLED
+}
+
+enum DocumentStatus {
+  PENDING_REGISTRATION
+  REGISTERED
+  REPLACED
+  DELETED
+}
+
+enum RequestScopeType {
+  PROFILE
+  DOCUMENTS
+  FEATURES
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum ConsentStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum AccessSessionStatus {
+  PENDING_OTP
+  ACTIVE
+  EXPIRED
+  REVOKED
+  CLOSED
+}
+
+enum OtpPurpose {
+  CUSTOMER_APPROVAL
+  SESSION_ACTIVATION
+}
+
+enum AttestationStatus {
+  VALID
+  SUSPENDED
+  REVOKED
+}
+
+enum SourceType {
+  BUSINESS
+  OFFICER
+}
+
+enum RiskBand {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum AssessmentStatus {
+  DRAFT
+  FINALISED
+}
+
+enum KycOutcome {
+  VERIFIED
+  NOT_VERIFIED
+  NEEDS_MORE_INFO
+}
+
+model Institution {
+  id        String            @id @default(auto()) @map("_id") @db.ObjectId
+  name      String
+  type      InstitutionType
+  mspId     String
+  status    InstitutionStatus @default(ACTIVE)
+  settings  String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model User {
+  id                 String     @id @default(auto()) @map("_id") @db.ObjectId
+  role               UserRole
+  institutionId      String?
+  businessId         String?
+  email              String     @unique
+  phone              String?
+  passwordHash       String
+  status             UserStatus @default(ACTIVE)
+  mustChangePassword Boolean    @default(false)
+  failedLoginCount   Int        @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+}
+
+model Business {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  businessRef String   @unique // On-chain random UUID
+  legalName   String
+  identifiers String // Encrypted at rest
+  contact     String?
+  ownerUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Document {
+  id          String         @id @default(auto()) @map("_id") @db.ObjectId
+  docRef      String         @unique // On-chain random UUID
+  businessId  String
+  docType     String
+  status      DocumentStatus @default(PENDING_REGISTRATION)
+  storageKey  String // Opaque UUID key in StorageProvider
+  wrappedDek  String
+  iv          String
+  authTag     String
+  salt        String // Encrypted salt
+  contentHash String // SHA-256(plaintext || salt)
+  mime        String
+  sizeBytes   Int
+  version     Int            @default(1)
+  deletedAt   DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+}
+
+model ProfileShareCode {
+  id                     String    @id @default(auto()) @map("_id") @db.ObjectId
+  businessId             String
+  codeHash               String
+  consentDurationMinutes Int       @default(10080) // 7 days in minutes
+  otpChallengeId         String
+  expiresAt              DateTime
+  usedAt                 DateTime?
+  redeemedByUserId       String?
+  redeemedByInstitutionId String?
+  createdAt              DateTime  @default(now())
+}
+
+model AccessRequest {
+  id                      String           @id @default(auto()) @map("_id") @db.ObjectId
+  businessId              String
+  institutionId           String
+  requestedByUserId       String
+  scopeType               RequestScopeType
+  requestedDocTypes       String[]
+  purposeCode             String
+  requestedDurationMinutes Int             @default(43200) // 30 days max
+  allowDownload           Boolean          @default(false)
+  message                 String?
+  status                  RequestStatus    @default(PENDING)
+  decidedByUserId         String?
+  decidedAt               DateTime?
+  approvalOtpChallengeId  String?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+}
+
+model ConsentGrant {
+  id          String        @id @default(auto()) @map("_id") @db.ObjectId
+  consentId   String        @unique // Matches on-chain consentId
+  requestId   String?
+  businessRef String
+  institutionId String
+  scopeType   String
+  docRefs     String[]
+  expiresAt   DateTime
+  status      ConsentStatus @default(ACTIVE)
+  ledgerTxId  String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model AccessSession {
+  id                    String              @id @default(auto()) @map("_id") @db.ObjectId
+  consentId             String
+  officerUserId         String
+  institutionId         String
+  status                AccessSessionStatus @default(PENDING_OTP)
+  activatedAt           DateTime?
+  expiresAt             DateTime
+  clientFingerprintHash String
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+}
+
+model OtpChallenge {
+  id            String     @id @default(auto()) @map("_id") @db.ObjectId
+  purpose       OtpPurpose
+  subjectUserId String
+  boundEntityId String
+  codeHash      String
+  attempts      Int        @default(0)
+  expiresAt     DateTime
+  consumedAt    DateTime?
+  createdAt     DateTime   @default(now())
+}
+
+model Attestation {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  attId           String            @unique // Matches on-chain attId
+  businessRef     String
+  issuerInstId    String
+  type            String
+  status          AttestationStatus @default(VALID)
+  validUntil      DateTime
+  docHashSnapshot String[]
+  ledgerTxId      String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model FinancialProfile {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  businessId  String
+  periodStart DateTime
+  periodEnd   DateTime
+  features    String // JSON string of 13 features
+  source      SourceType
+  consentId   String?
+  createdAt   DateTime   @default(now())
+}
+
+model RiskAssessment {
+  id                   String           @id @default(auto()) @map("_id") @db.ObjectId
+  businessId           String
+  institutionId        String
+  officerUserId        String
+  financialProfileId   String?
+  featureSchemaVersion String           @default("1.0")
+  modelVersion         String
+  probability          Float
+  band                 RiskBand
+  topFactors           String // JSON string
+  inputsHash           String
+  status               AssessmentStatus @default(DRAFT)
+  reviewNote           String?
+  reportHash           String?
+  ledgerTxId           String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+}
+
+model AuditEvent {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  actor         String
+  institutionId String?
+  businessId    String?
+  action        String
+  entityType    String
+  entityId      String
+  metadata      String // JSON string without secrets
+  at            DateTime @default(now())
+  ledgerTxId    String?
+}
+
+model LedgerTx {
+  id                 String   @id @default(auto()) @map("_id") @db.ObjectId
+  chaincodeFunction  String
+  txId               String
+  status             String
+  latencyMs          Int
+  at                 DateTime @default(now())
+}
+
+model KycReview {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  businessId      String
+  institutionId   String
+  officerUserId   String
+  consentId       String
+  accessSessionId String
+  outcome         KycOutcome
+  checklist       String // JSON string
+  notes           String
+  docRefsReviewed String[]
+  attestationId   String?
+  createdAt       DateTime   @default(now())
+}
+
+model Notification {
+  id         String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId     String
+  type       String
+  entityType String
+  entityId   String
+  createdAt  DateTime  @default(now())
+  readAt     DateTime?
+}
+
+model DevOutbox {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  channel   String
+  recipient String
+  body      String
+  createdAt DateTime @default(now())
+}
+
+model ServerSession {
+  id                 String    @id @default(auto()) @map("_id") @db.ObjectId
+  sessionId          String    @unique
+  userId             String
+  createdAt          DateTime  @default(now())
+  lastSeenAt         DateTime  @default(now())
+  idleExpiresAt      DateTime
+  absoluteExpiresAt  DateTime
+  ipHash             String
+  userAgentHash      String
+  csrfTokenHash      String
+  revokedAt          DateTime?
+}

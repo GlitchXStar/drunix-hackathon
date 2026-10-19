@@ -1,0 +1,25 @@
+{
+  "name": "trustledger",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TrustLedger — Consent-Based MSME Verification & Credit Risk Assessment on Drunix",
+  "workspaces": [
+    "backend/api",
+    "apps/*"
+  ],
+  "scripts": {
+    "install:all": "npm install && npm run prisma:generate --workspace=@trustledger/api",
+    "lint": "npm run lint --workspace=@trustledger/api",
+    "format": "prettier --write \"backend/api/**/*.{ts,js,json,md}\" \"apps/**/*.{ts,js,json,md}\"",
+    "test": "npm run test --workspace=@trustledger/api",
+    "test:integration": "npm run test:integration --workspace=@trustledger/api",
+    "test:risk": "python -m pytest backend/risk-service",
+    "test:drunix": "node --loader ts-node/esm infra/scripts/test-multi-org.ts",
+    "build": "npm run build --workspace=@trustledger/api",
+    "docker:up": "docker compose -f infra/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
