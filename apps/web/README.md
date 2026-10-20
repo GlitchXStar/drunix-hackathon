@@ -133,4 +133,3 @@ All visible demo information is synthetic. The UI must not present risk context 
 - Real OTP flows, document upload, consent mutation, and notifications
 - Server-authorized, watermarked document-page rendering
 - Playwright end-to-end coverage for the consent journey
-
