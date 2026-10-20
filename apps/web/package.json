@@ -1,26 +1,24 @@
 {
-  "name": "@trustledger/web",
-  "version": "1.0.0",
+  "name": "trustledger-frontend",
   "private": true,
-  "description": "TrustLedger Next.js Web Frontend (Owned by Person 1)",
+  "version": "0.1.0",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint ."
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "next": "^14.2.23"
+    "@types/node": "22.10.2",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
+    "next": "15.1.2",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "typescript": "5.7.2"
   },
   "devDependencies": {
-    "typescript": "^5.7.3",
-    "@types/node": "^22.13.1",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "tailwindcss": "^3.4.17",
-    "postcss": "^8.5.1",
-    "autoprefixer": "^10.4.20"
+    "eslint": "^8.57.1",
+    "eslint-config-next": "^15.1.2"
   }
 }
