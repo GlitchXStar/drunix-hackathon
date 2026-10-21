@@ -1,6 +1,15 @@
 # TrustLedger Frontend
 
-Next.js App Router frontend for the TrustLedger consent-based MSME verification prototype.
+TrustLedger is a Next.js App Router prototype for consent-based MSME verification. It demonstrates how a Business Owner, institutional officers, Institution Admins, and Platform Super Admins move through purpose-bound verification workflows without presenting consent, attestations, or decision support as automatic approval.
+
+All visible information is synthetic. This frontend is a static prototype: it has no production authentication, API calls, ledger calls, file uploads, OTP delivery, or browser-side persistence of sensitive data.
+
+## Technology
+
+- Next.js 15 with the App Router
+- React 19 and TypeScript
+- Plain CSS in `app/globals.css`
+- ESLint with `eslint-config-next`
 
 ## Run locally
 
@@ -9,9 +18,9 @@ npm install
 npm run dev
 ```
 
-The local app runs at `http://localhost:3000` by default.
+Open `http://localhost:3000`.
 
-## Checks
+## Quality checks
 
 ```bash
 npm run lint
@@ -19,117 +28,135 @@ npx tsc --noEmit
 npm run build
 ```
 
-## Structure
+## Repository placement
+
+In the shared monorepo, this application belongs at `apps/web/`. The current `frontend/` directory is the local working copy used to develop that application. Do not keep two diverging frontend source trees.
 
 ```text
-app/
-  page.tsx                         Landing page
-  login/                           Shared sign-in
-  register/                        MSME registration
-  business/                        Business Owner workspace
-  institution/                    Institution, KYC, and Institution Admin screens
-  admin/                           Platform Super Admin screens
-  globals.css                      Shared visual system and responsive styles
-  a11y.css                         Shared focus and screen-reader utilities
-assets/                            Frontend assets (currently unused)
-design.md                          Project design-system reference
+apps/web/                 Published frontend location in the monorepo
+  app/                    Routes, styles, and page-specific UI
+  app/globals.css         Shared design system and responsive rules
+  app/a11y.css            Focus and screen-reader utilities
+  app/layout.tsx          Root document metadata and global styles
+  design.md               Design-system reference
+  package.json            Frontend scripts and dependencies
 ```
 
-Routes use the Next.js App Router. The current role sidebars are implemented in-page; extracting them into shared components is a sensible next cleanup once the remaining screens are built.
+Role sidebars are currently implemented in individual route files so screens can evolve quickly. Consolidating them into role-aware shared components is a later cleanup once real authentication and server-side routing are introduced.
 
-## Implemented screens
+## Implemented routes
 
 ### Public
 
-- `/` — landing page
-- `/login` — shared sign-in
-- `/register` — Business Owner registration
+- `/` - TrustLedger landing page
+- `/login` - shared sign-in
+- `/register` - Business Owner registration
 
 ### Business Owner
 
-- `/business/profile` — business profile and changed-since-verified context
-- `/business/documents` — document vault
-- `/business/documents/upload` — upload and registration states
-- `/business/documents/GST-001` — version, replace, and delete states
-- `/business/share-codes` — profile share codes and owner OTP confirmation
-- `/business/requests` — incoming verification requests
-- `/business/requests/VR-2026-0184` — per-document approval scope
-- `/business/consents` — active and historic consents
-- `/business/access-history` — consented access audit history
-- `/business/verification-history` — issuer and attestation history
-- `/business/notifications` — business notifications
-- `/business/employees` — employee roles and owner-only boundaries
-
-### Institution / KYC Officer
-
-- `/institution/redeem` — profile share-code redemption
-- `/institution/requests/new` — verification request composer
-- `/institution/requests/VR-2026-0184` — request status and item-level consent state
-- `/institution/attestations` — attestation review
-- `/institution/access-session` — controlled document access session
-- `/institution/risk-review` — decision-support context
-
-### Institution Admin
-
-- `/institution/employees` — tenant employee management
-- `/institution/notifications` — institution notifications
-
-### Platform Super Admin
-
-- `/admin` — operational overview
-- `/admin/institutions` — institution tenants
-- `/admin/institutions/new` — institution and first-admin onboarding
-- `/admin/users` — user and role directory
-- `/admin/audit` — metadata-only platform audit trail
-
-## Current prototype behavior
-
-The screens are static UI prototypes. Buttons and forms are intentionally presentational until the backend contracts are connected. No browser-side calls are made to the ledger, file storage, or risk service. Do not store tokens, OTPs, or document data in browser storage when integration begins.
-
-The document-viewer screen includes visual copying deterrents and explicit limits. Production document pages must be server-rendered with a burned-in watermark and re-authorized by the backend for every access request.
-
-All visible demo information is synthetic. The UI must not present risk context as an automated lending decision or imply production readiness.
-
-## Remaining frontend scope
+- `/business/profile` - business profile and changed-since-verified context
+- `/business/documents` - document vault
+- `/business/documents/upload` - upload and registration state
+- `/business/documents/GST-001` - document version, replace, and delete state
+- `/business/share-codes` - profile share codes and owner OTP confirmation UI
+- `/business/requests` - incoming verification requests
+- `/business/requests/VR-2026-0184` - item-level consent decision scope
+- `/business/consents` - active and historic consents
+- `/business/access-history` - consented access history
+- `/business/verification-history` - attestation and verification history
+- `/business/notifications` - business notifications
+- `/business/employees` - employee roles and owner-only boundaries
 
 ### KYC Officer
 
-- Request list
-- Officer session activation with OTP
-- KYC review form
-- Attestation issue, management, and lookup
-- Institution-scoped audit view
+- `/institution/redeem` - profile share-code redemption
+- `/institution/requests` - verification-request inbox
+- `/institution/requests/new` - verification request composer
+- `/institution/requests/VR-2026-0184` - request status and approved evidence scope
+- `/institution/session-activation` - officer OTP session-activation UI
+- `/institution/access-session` - time-bound, watermarked document-viewing environment
+- `/institution/kyc-review` - private checklist, review outcome, and internal notes
+- `/institution/attestations` - consent-limited attestation evidence review
+- `/institution/attestations/issue` - KYC_BASIC issuance draft with viewed-document hash snapshot
+- `/institution/attestations/manage` - issuer-owned attestation lifecycle
+- `/institution/attestations/lookup` - cross-institution, consent-limited attestation lookup
 
 ### Loan Officer
 
-- Financial profile form
-- Risk assessment draft and run flow
-- Risk report review
-- Assessment finalisation
+- `/institution/financial-profile` - structured financial-profile input
+- `/institution/risk-assessment` - assessment draft and input snapshot
+- `/institution/risk-review` - synthetic report review, factors, and officer-note step
+- `/institution/risk-assessment/finalise` - finalisation confirmation
 
 ### Compliance Officer
 
-- Compliance review workspace
-- Institution-scoped audit trail
+- `/institution/compliance-review` - consent, session, integrity, and policy review workspace
+- `/institution/audit` - tenant-scoped metadata-only audit trail
 
 ### Institution Admin
 
-- Tenant settings
-- Invite success screen with temporary password shown once
-- User-management audit
+- `/institution/employees` - tenant employee management
+- `/institution/employees/invite-success` - one-time temporary-password success state
+- `/institution/employees/audit` - employee and role-change audit trail
+- `/institution/settings` - tenant identity and operational-default settings
+- `/institution/notifications` - institution notifications
 
 ### Platform Super Admin
 
-- Suspend/reactivate institution confirmation flow
-- Institution Admin creation success flow
-- Policy controls
-- Detailed service-health and ledger-unavailable states
+- `/admin` - platform operations overview
+- `/admin/institutions` - institution tenant list
+- `/admin/institutions/new` - tenant and first-admin onboarding form
+- `/admin/institutions/new/success` - first-admin success state with one-time temporary password
+- `/admin/institutions/status` - suspend/reactivate confirmation state
+- `/admin/users` - platform user and role directory
+- `/admin/audit` - metadata-only platform audit trail
+- `/admin/policies` - operational policy controls and fixed security guardrails
+- `/admin/health` - dependency health and ledger-unavailable fail-closed state
 
-### Shared integration work
+## Workflow coverage
 
-- Authentication and server-side role-aware routing
-- API client and real backend data
-- Loading, empty, error, and ledger-unavailable states
-- Real OTP flows, document upload, consent mutation, and notifications
-- Server-authorized, watermarked document-page rendering
-- Playwright end-to-end coverage for the consent journey
+The prototype presents these primary journeys:
+
+1. A Business Owner maintains a profile and document vault, produces an owner-approved share code, then receives and decides item-level verification requests.
+2. An institutional KYC Officer redeems consent, activates a restricted session with an OTP UI, views approved evidence, records a private KYC review, and prepares an attestation from documents viewed during that session.
+3. A Loan Officer enters a structured financial profile, prepares a synthetic assessment, reviews its factors, records an internal note, and reaches finalisation confirmation.
+4. A Compliance Officer reviews consent/session context and accesses only Bank A's metadata audit trail.
+5. An Institution Admin manages tenant staff, operational defaults, and one-time employee credentials.
+6. A Platform Super Admin onboards institutions, changes tenant eligibility, controls permitted operational defaults, and observes fail-closed dependency health.
+
+## Design and safety rules represented in the UI
+
+- The visual system uses dark operational sidebars, neutral content surfaces, high-contrast controls, responsive grids, and visible keyboard focus styles.
+- Consent is distinct from an attestation. Consent controls access; an attestation is issuer evidence, not a document-release mechanism or decision.
+- KYC notes, risk work, and original documents are not shown in cross-institution attestation lookup.
+- Only documents actually viewed in a session appear in the attestation-issue snapshot.
+- OTP controls show expiry and attempt-limit concepts, but never display, save, or log real OTPs.
+- Document access is described as time-bound, purpose-bound, view-only, auditable, and subject to future server-side re-authorisation.
+- Risk outputs are labelled synthetic decision support; they do not approve, decline, price, or otherwise automate lending outcomes.
+- Tenant suspension and ledger-unavailable states are shown as fail-closed for protected access.
+- One-time temporary-password screens state that the credential must not be retained in browser storage, lists, or audit metadata.
+- Audit screens display metadata only and explicitly exclude secrets, OTPs, credentials, document bytes, and raw financial features.
+
+## Current prototype boundaries
+
+Forms and buttons are intentional presentation states until backend contracts are connected. Do not infer that any local UI action changes records, verifies OTPs, activates sessions, uploads files, grants consent, issues attestations, or finalises an assessment.
+
+The document viewer provides a visual watermark and copying deterrent only. A production implementation must render documents through a server-authorised, no-store response with a burned-in watermark and a ledger-backed access check on every protected release.
+
+## Remaining implementation work
+
+There are no planned role-based screens remaining. The next work is shared integration and production hardening:
+
+- Authentication, server-side sessions, CSRF protection, and role-aware route protection
+- API client, backend contracts, loading states, empty states, error states, and real data
+- Real OTP issue/verify flows with entity binding, expiry, attempt limits, and safe delivery
+- Real document upload, encrypted storage, integrity verification, versioning, and delete workflows
+- Ledger-first consent, session, attestation, and assessment state transitions
+- Server-authorised, watermarked document-page rendering and download enforcement
+- Real notifications and audit-event feeds
+- Playwright end-to-end coverage for the consent journey and critical failure paths
+- Accessibility QA, browser/device testing, and deployment configuration
+
+## Publishing notes
+
+The frontend `.gitignore` excludes dependencies, build output, local environment files, logs, and editor configuration. Publish frontend source only; never commit `node_modules`, `.next`, secret `.env` files, OTPs, temporary passwords, document data, or backend-only credentials.
