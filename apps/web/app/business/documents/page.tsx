@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AppSidebar from "../../components/AppSidebar";
 
 const documents = [
   ["GST Certificate", "PDF · 18 Oct 2026", "REGISTERED", "v1"],
@@ -7,18 +8,7 @@ const documents = [
   ["Annual Return", "PDF · 15 Oct 2026", "PENDING REGISTRATION", "Retry registration"],
 ];
 
-function Sidebar() {
-  return <aside className="business-sidebar">
-    <Link href="/" className="brand"><span className="brand-mark">◉</span>TrustLedger</Link>
-    <p className="business-role">Business workspace<br /><strong>Business owner</strong></p>
-    <nav className="business-nav" aria-label="Business navigation">
-      <Link href="/business/profile">Business profile</Link><Link className="active" href="/business/documents">Document vault</Link>
-      <Link href="/business/share-codes">Share codes</Link><Link href="/business/requests">Requests</Link><Link href="/business/consents">Consents</Link>
-      <Link href="/business/access-history">Access history</Link><Link href="/business/verification-history">Verification history</Link><Link href="/business/notifications">Notifications</Link>
-    </nav>
-    <div className="business-user"><span>ZF</span><div><strong>Zenith Fabrication Works</strong><small>MSME profile · active</small></div></div>
-  </aside>;
-}
+function Sidebar() { return <AppSidebar role="businessOwner" />; }
 
 export default function DocumentsPage() {
   return <main className="business-app"><Sidebar /><section className="business-main">

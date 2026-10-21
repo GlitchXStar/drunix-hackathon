@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./a11y.css";
+import "./fixes.css";
 
 export const metadata: Metadata = {
   title: "TrustLedger | Consent-based MSME verification",

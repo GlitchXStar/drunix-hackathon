@@ -1,17 +1,7 @@
 import Link from "next/link";
+import AppSidebar from "../../components/AppSidebar";
 
-function Sidebar() {
-  return <aside className="business-sidebar">
-    <Link href="/" className="brand"><span className="brand-mark">◉</span>TrustLedger</Link>
-    <p className="business-role">Business workspace<br /><strong>Business owner</strong></p>
-    <nav className="business-nav" aria-label="Business navigation">
-      <Link href="#">Overview</Link><Link href="/business/documents">Document vault</Link>
-      <Link className="active" href="/business/share-codes">Share codes</Link><Link href="#">Requests</Link><Link href="#">Consents</Link>
-      <Link href="#">Access history</Link><Link href="#">Verification history</Link><Link href="#">Notifications</Link>
-    </nav>
-    <div className="business-user"><span>ZF</span><div><strong>Zenith Fabrication Works</strong><small>MSME profile · active</small></div></div>
-  </aside>;
-}
+function Sidebar() { return <AppSidebar role="businessOwner" />; }
 
 export default function ShareCodesPage() {
   return <main className="business-app"><Sidebar /><section className="business-main">
