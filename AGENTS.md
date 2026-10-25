@@ -68,3 +68,51 @@ On every session launch, the agent automatically operates under:
 1. **Gravitas:** Ground before mutating, stay in scope, evidence-backed verification (`VERDICT: PASS/FAIL`), report (What Changed, Evidence, Why).
 2. **Ponytail:** Minimal working diff, no over-engineering or speculative wrappers, utilize existing codebase patterns.
 3. **GSD:** Milestone-aware, phase tracking, structured planning and progress advancement.
+
+---
+
+# Stage 7 Completion Report — KYC Reviews, Attestations & Cross-Institution Lookup
+
+## 1. Done
+Implemented Stage 7 KYC review recording, Drunix attestation issuance, D-9 lifecycle status transitions (suspension/revocation), cross-institution attestation lookup with document integrity verification, and MSME owner attestation viewing:
+- `backend/api/src/attestations/dto/create-kyc-review.dto.ts`: Input validation for private KYC review creation.
+- `backend/api/src/attestations/dto/issue-attestation.dto.ts`: Attestation issuance validation with 1-24 month validity.
+- `backend/api/src/attestations/dto/update-attestation-status.dto.ts`: Status transition validation enforcing D-9 lifecycle rules (`SUSPENDED`, `REVOKED`) and mandatory reason code.
+- `backend/api/src/attestations/dto/attestation-lookup-response.dto.ts`: Strict allowlisted projection DTO preventing leakage of private review notes or checklists.
+- `backend/api/src/attestations/attestations.service.ts`: Core business logic with:
+  - `createKycReview`: Session verification, consent scope check, and strict enforcement that `docRefsReviewed` must be a subset of `session.viewedDocRefs`.
+  - `issueAttestation`: Review outcome check (`VERIFIED`), duplicate prevention, construction of `docHashSnapshot` from authoritative on-chain hashes of documents actually viewed in session, Drunix submission (`IssueAttestation`), DB projection persistence, and owner notification.
+  - `updateAttestationStatus`: Enforces D-9 (`VALID` -> `SUSPENDED` | `REVOKED`; `SUSPENDED` -> `REVOKED`; no reinstatement; no transition from terminal `REVOKED`), submits `UpdateAttestationStatus` on Drunix, updates local projection, and audits change.
+  - `lookupAttestations`: Validates active `PROFILE` consent, verifies access via ledger `CheckAccess`, queries on-chain attestations via `GetAttestations`, calculates dynamic `EXPIRED` status, computes `documentsUnchangedSinceAttestation`, and strictly redacts internal review notes/checklists.
+  - `getBusinessAttestations`: Business owner view of all attestations issued for their business.
+- `backend/api/src/attestations/institution-attestations.controller.ts`: Institution routes (`POST /kyc-reviews`, `POST /attestations`, `PATCH /attestations/:id/status`, `GET /consents/:consentId/attestations`).
+- `backend/api/src/attestations/business-attestations.controller.ts`: MSME Owner route (`GET /business/attestations`).
+- `backend/api/src/attestations/attestations.module.ts`: Wired into `backend/api/src/app.module.ts`.
+- `backend/api/src/attestations/attestations.service.spec.ts`: 32 comprehensive unit tests covering all Stage 7 logic.
+- `backend/api/test/attestations.e2e-spec.ts`: 11 end-to-end integration tests covering multi-org W3 and W5 workflows.
+- `docs/api.md`: Updated with complete Stage 7 API contracts, schemas, error codes, and privacy rules.
+- `reports/security-tests.md`: Updated with security tests S-19 through S-24 and updated test counts.
+
+## 2. Checks run
+- `npm run prisma:generate --workspace=@trustledger/api`: PASS (Prisma Client generated).
+- `npm run lint --workspace=@trustledger/api`: PASS (0 errors, 0 warnings).
+- `npm run test --workspace=@trustledger/api`: PASS (154/154 passed across 12 test suites).
+- `npm run test:integration --workspace=@trustledger/api`: PASS (30/30 passed across 6 test suites).
+- `npm run test:risk`: PASS (2/2 passed in pytest).
+- `npm run test:drunix`: PASS (3/3 orgs validated against Drunix chaincode simulation).
+- `npm run build --workspace=@trustledger/api`: PASS (Nest build succeeded).
+- `git diff --check`: PASS (Clean working tree, no whitespace issues).
+
+## 3. Not done or deferred
+- Real live Drunix network and Docker containers are not running on this host (Docker daemon not active); tested against comprehensive Drunix mock ledger and simulation suite.
+- Stage 8 (Credit-risk assessments/ML) deferred to Stage 8.
+
+## 4. Decisions and deviations
+- No deviations from the specification. D-9 (`VALID` -> `SUSPENDED` or `REVOKED`, no reinstatement) was strictly enforced.
+
+## 5. Open questions
+- None. All requirements for Stage 7 met and verified.
+
+## 6. Next stage
+Stage 8 — Risk service
+

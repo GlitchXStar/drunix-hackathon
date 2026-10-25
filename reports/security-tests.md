@@ -23,9 +23,16 @@
 | S-16 | Log & audit redaction (no plaintext OTPs, keys, passwords) | Verified clean | **PASS** | `log-redaction.spec.ts` |
 | S-17 | Risk service request without internal token | 401 Unauthorized | **PASS** | `backend/risk-service/tests/test_api.py` |
 | S-18 | Document requested outside approved docRefs scope | 403 DOC_NOT_IN_SCOPE | **PASS** | `sessions.service.spec.ts`, `sessions.e2e-spec.ts` |
+| S-19 | KYC review references document not viewed in active session | 400 DOC_NOT_VIEWED_IN_SESSION | **PASS** | `attestations.service.spec.ts`, `attestations.e2e-spec.ts` |
+| S-20 | Cross-institution lookup leaks KYC review notes, checklists or internal assessments | Verified strictly filtered/redacted | **PASS** | `attestations.service.spec.ts`, `attestations.e2e-spec.ts` |
+| S-21 | Attestation reinstatement from SUSPENDED/REVOKED back to VALID (D-9) | Rejected terminal state / prohibited | **PASS** | `attestations.service.spec.ts`, `attestations.e2e-spec.ts` |
+| S-22 | Attestation lookup with DOCUMENTS or FEATURES consent instead of PROFILE | 403 SCOPE_MISMATCH | **PASS** | `attestations.service.spec.ts` |
+| S-23 | Attestation lookup with document replaced/modified after attestation issuance | `documentsUnchangedSinceAttestation: false` | **PASS** | `attestations.service.spec.ts`, `attestations.e2e-spec.ts` |
+| S-24 | Ledger unreachable during attestation issuance, status change, or lookup (I-1 fail closed) | 403 LEDGER_UNAVAILABLE | **PASS** | `attestations.service.spec.ts`, `attestations.e2e-spec.ts` |
 
 ## Summary of Verification Runs
-- **Unit Tests:** 122 / 122 passed (`npm test`)
-- **Integration Tests:** 19 / 19 passed (`npm run test:integration`)
+- **Unit Tests:** 154 / 154 passed (`npm test`)
+- **Integration Tests:** 30 / 30 passed (`npm run test:integration`)
 - **Risk Service Tests:** 2 / 2 passed (`npm run test:risk`)
 - **Multi-Org Drunix Simulation:** 3 / 3 orgs passed (`npm run test:drunix`)
+

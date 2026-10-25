@@ -14,6 +14,7 @@ import { DocumentsModule } from './documents/documents.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ConsentModule } from './consent/consent.module';
 import { SessionsModule } from './sessions/sessions.module';
+import { AttestationsModule } from './attestations/attestations.module';
 import { SessionGuard } from './auth/session.guard';
 import { RolesGuard } from './policy/roles.guard';
 
@@ -33,6 +34,7 @@ import { RolesGuard } from './policy/roles.guard';
     NotificationsModule,
     ConsentModule,
     SessionsModule,
+    AttestationsModule,
   ],
   controllers: [AppController],
   providers: [
