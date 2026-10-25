@@ -22,15 +22,16 @@
 ## Table of Contents
 1. [The Problem: India's MSME Credit & KYC Gap](#1-the-problem-indias-msme-credit--kyc-gap)
 2. [The Solution: TrustLedger on NPCI Drunix](#2-the-solution-trustledger-on-npci-drunix)
-3. [System Architecture](#3-system-architecture)
-4. [NPCI Drunix DLT Integration: How & Where It Is Used](#4-npci-drunix-dlt-integration-how--where-it-is-used)
-5. [The Privacy Boundary: What is On-Chain vs. Off-Chain](#5-the-privacy-boundary-what-is-on-chain-vs-off-chain)
-6. [End-to-End Product Walkthrough (The 5 Core Workflows)](#6-end-to-end-product-walkthrough-the-5-core-workflows)
-7. [Explainable Credit Risk Assessment (ML Microservice)](#7-explainable-credit-risk-assessment-ml-microservice)
-8. [Security, Invariants & Cryptographic Defense](#8-security-invariants--cryptographic-defense)
-9. [Technology Stack & Repository Layout](#9-technology-stack--repository-layout)
-10. [Local Development & Setup Guide](#10-local-development--setup-guide)
-11. [Honesty & Architecture Disclosures (H-1 to H-8)](#11-honesty--architecture-disclosures-h-1-to-h-8)
+3. [Competitive Landscape: How TrustLedger Differs & Excels](#3-competitive-landscape-how-trustledger-differs--excels)
+4. [System Architecture](#4-system-architecture)
+5. [NPCI Drunix DLT Integration: How & Where It Is Used](#5-npci-drunix-dlt-integration-how--where-it-is-used)
+6. [The Privacy Boundary: What is On-Chain vs. Off-Chain](#6-the-privacy-boundary-what-is-on-chain-vs-off-chain)
+7. [End-to-End Product Walkthrough (The 5 Core Workflows)](#7-end-to-end-product-walkthrough-the-5-core-workflows)
+8. [Explainable Credit Risk Assessment (ML Microservice)](#8-explainable-credit-risk-assessment-ml-microservice)
+9. [Security, Invariants & Cryptographic Defense](#9-security-invariants--cryptographic-defense)
+10. [Technology Stack & Repository Layout](#10-technology-stack--repository-layout)
+11. [Local Development & Setup Guide](#11-local-development--setup-guide)
+12. [Honesty & Architecture Disclosures (H-1 to H-8)](#12-honesty--architecture-disclosures-h-1-to-h-8)
 
 ---
 
@@ -73,7 +74,64 @@ India's 63+ million Micro, Small, and Medium Enterprises (MSMEs) form the backbo
 
 ---
 
-## 3. System Architecture
+## 3. Competitive Landscape: How TrustLedger Differs & Excels
+
+While the Indian digital public infrastructure (DPI) ecosystem has pioneered retail payments (UPI) and structured financial telemetry (Account Aggregator), critical voids remain in **unstructured enterprise document verification, multi-lender KYC reuse, and privacy-preserving credit underwriting**.
+
+### 3.1 Comprehensive Industry Comparison Matrix
+
+| Feature / Architectural Dimension | Central KYC (CKYC / CERSAI) | Account Aggregator (AA / Sahamati) | Entity DigiLocker (MeitY) | Generic Public / DLT Blockchain | **TrustLedger on NPCI Drunix** |
+|:---|:---:|:---:|:---:|:---:|:---:|
+| **Primary Data Payload** | Identity numbers (Aadhaar / PAN) | Financial telemetry (Bank/GST APIs) | Issuer-pushed public certificates | Generic files / hashes | **Encrypted enterprise files (PDF/PNG) + Structured ML telemetry** |
+| **Document Storage & Vaulting** | Centralized database (Metadata only) | ❌ None (Streaming pipeline only) | Centralized government cloud | Off-chain (IPFS / Public cloud) | **Zero-Trust AES-256-GCM Envelope Encryption (LocalFS / Nextcloud)** |
+| **Cross-Lender KYC Reuse** | Partial (Often rejected/re-done by banks) | ❌ None (Requires fresh pull every time) | ❌ None (Raw docs without verification state) | Tokenized / Pseudo-anonymous | **✅ Verified on-chain KYC attestations (`IssueAttestation`) on Drunix** |
+| **Tamper-Evident Lineage** | ❌ None | N/A (Live API feeds) | ❌ None (Issuer dependent) | Static hash on-chain | **✅ Cryptographic document hash snapshot (`documentsUnchangedSinceAttestation`)** |
+| **Customer Consent Granularity** | ❌ None (Blanket consent) | Account-level consent | File-level sharing | Smart contract (Gas fee per tx) | **✅ Per-document tick-boxes, 60-min TTL share codes, download restrictions** |
+| **Access Enforcement Model** | Centralized ACL (Prone to internal breach) | Centralized Consent Manager | Centralized ACL | On-chain gas check | **✅ Fail-Closed Ledger Gate (`CheckAccess` must return ALLOW on Drunix)** |
+| **Leakage & Screen Capture Defense**| ❌ Raw PDF downloads | Raw JSON/XML feeds | Raw PDF downloads | Unprotected file downloads | **✅ Server-side dynamic burned-in watermarks (Officer ID + Time) + View-only stream** |
+| **Underwriting Intelligence** | ❌ None | Raw financial ratios | ❌ None | ❌ None | **✅ Sandboxed ML engine (13 ratios) with explainable SHAP factors** |
+| **Regulatory & Privacy Alignment** | Centralized PII honeypot | RBI AA Guidelines | IT Act / DigiLocker Rules | High risk (Public PII/IPFS leak) | **✅ Strict Invariant I-3: Zero PII on ledger (DPDP Act & GDPR compliant)** |
+
+---
+
+### 3.2 Key Technical Differentiators: What TrustLedger Does Better
+
+#### 1. Unstructured Enterprise Document Vaulting vs. Financial Telemetry Only (Account Aggregator)
+- **The Gap in Existing Solutions:** The Account Aggregator (AA) framework is designed exclusively for structured financial transaction data (FIP-to-FIU streams). It **cannot ingest, encrypt, or manage unstructured enterprise legal artifacts**—such as audited financial balance sheets, partnership deeds, board resolutions, municipal factory licenses, or machinery valuation certificates.
+- **TrustLedger's Technical Solution:** TrustLedger provides a customer-sovereign encrypted vault with AES-256-GCM envelope encryption. While raw bytes live securely off-chain, their salted cryptographic fingerprints (`HMAC-SHA256`) are anchored onto the Drunix ledger, providing immutable proof of existence without exposing confidential commercial terms.
+
+#### 2. Decentralized KYC Attestation & Dynamic Tamper Detection vs. Centralized CKYC
+- **The Gap in Existing Solutions:** Central KYC (CKYC) acts as a centralized database where banks frequently refuse to trust records uploaded by other institutions because they cannot verify what exact underlying documents were inspected or whether those documents were subsequently altered.
+- **TrustLedger's Technical Solution:** When Bank A verifies an MSME, it executes `IssueAttestation` on Drunix chaincode, capturing a cryptographic array of verified document hashes (`docHashSnapshot[]`). When NBFC B inspects this attestation, TrustLedger’s chaincode dynamically cross-references the snapshot against current on-chain document hashes:
+  $$\text{documentsUnchangedSinceAttestation} = \big( \text{docHashSnapshot} \equiv \text{CurrentLedgerHashes} \big)$$
+  If the borrower substituted or altered any financial statement after Bank A's approval, the system flags the attestation instantly—preventing loan fraud without Bank A leaking its proprietary underwriting notes.
+
+#### 3. Sovereign Customer Consent & Fail-Closed Enforcement vs. Permanent Data Sprawl
+- **The Gap in Existing Solutions:** In conventional banking, once an MSME emails financial documents, the receiving bank stores them indefinitely on unmonitored local storage. The business owner has zero technical power to revoke access or prevent files from being passed around.
+- **TrustLedger's Technical Solution:** TrustLedger implements **true non-custodial consent**:
+  - **Single-Use 60-Minute Profile Codes:** MSMEs reveal one-time share codes protected by owner OTP.
+  - **Granular Document Selectivity:** The business owner can approve 2 out of 5 requested documents and explicitly disable raw downloads.
+  - **Fail-Closed Access Gate:** The backend performs an on-chain `CheckAccess` query before decrypting any document chunk. If the consent has expired or was revoked by the owner, access is cryptographically blocked at the ledger level.
+
+#### 4. Zero-Knowledge / DPDP Act Privacy Boundary on DLT vs. Naive Blockchain Storage
+- **The Gap in Existing Solutions:** Naive enterprise blockchain pilots frequently store document hashes on public ledgers or store file metadata in IPFS, inadvertently leaking entity identities, transaction patterns, and personal data (violating India's Digital Personal Data Protection Act, 2023).
+- **TrustLedger's Technical Solution:** TrustLedger enforces Invariant **I-3**: **Zero document bytes, encryption keys, OTPs, or PII ever reach Drunix.** All identities use opaque UUIDs (`businessRef`, `docRef`), and hashes are salted with cryptographically secure random nonces. Compromising the ledger grants an adversary zero usable personal or financial intelligence.
+
+#### 5. Server-Burned Dynamic Watermarking vs. Desktop File Leaks
+- **The Gap in Existing Solutions:** Typical portals let loan officers download raw PDF files directly to personal laptops, creating massive insider threat vulnerabilities. CSS-based watermarks can be removed in seconds using browser DevTools.
+- **TrustLedger's Technical Solution:** The TrustLedger backend renders PDF pages into rasterized PNG buffers via `@napi-rs/canvas` and permanently burns an un-removable diagonal watermark directly into the image pixel matrix before streaming:
+  ```text
+  CONFIDENTIAL — [INSTITUTION] — OFFICER: [OFFICER_ID] — [TIMESTAMP_UTC] — FOR REVIEW ONLY
+  ```
+  Coupled with strict 15-minute countdown session expiration and disabled right-click/print controls, file extraction is strictly mitigated.
+
+#### 6. Explainable Decision-Support AI (SHAP) vs. Black-Box Scoring
+- **The Gap in Existing Solutions:** Credit bureau scores (CIBIL/Equifax) provide single numerical values without transparent explanations, often disadvantaging new-to-credit MSMEs. Furthermore, sending full financial documents to public LLMs creates severe confidentiality breaches.
+- **TrustLedger's Technical Solution:** TrustLedger’s Python FastAPI microservice receives **only 13 validated structured financial ratios** (no names, PAN, or document text). It outputs an objective risk probability, an interpretable risk band (`LOW`, `MEDIUM`, `HIGH`), and the **top 3 positive and negative driving factors via SHAP** (Shapley Additive Explanations). The final decision remains human: loan officers must record a qualitative review note before the cryptographic report hash is anchored to Drunix.
+
+---
+
+## 4. System Architecture
 
 TrustLedger uses a high-performance, multi-tenant monorepo architecture strictly decoupling user interfaces, workflow orchestration, encrypted object storage, machine learning, and the decentralized ledger.
 
@@ -144,7 +202,7 @@ flowchart TB
 
 ---
 
-## 4. NPCI Drunix DLT Integration: How & Where It Is Used
+## 5. NPCI Drunix DLT Integration: How & Where It Is Used
 
 TrustLedger is built specifically for **NPCI Drunix**, a high-throughput, enterprise-grade distributed ledger platform optimized for Indian financial rails.
 
@@ -187,7 +245,7 @@ The TrustLedger chaincode implements 10 authoritative ledger transactions:
 
 ---
 
-## 5. The Privacy Boundary: What is On-Chain vs. Off-Chain
+## 6. The Privacy Boundary: What is On-Chain vs. Off-Chain
 
 TrustLedger strictly abides by architectural invariant **I-3**: **No document bytes, encryption keys, passwords, OTPs, raw financial figures, or direct personal identifiers (PII) are EVER written to the Drunix ledger.**
 
@@ -245,7 +303,7 @@ flowchart LR
 
 ---
 
-## 6. End-to-End Product Walkthrough (The 5 Core Workflows)
+## 7. End-to-End Product Walkthrough (The 5 Core Workflows)
 
 ```mermaid
 sequenceDiagram
@@ -307,7 +365,7 @@ sequenceDiagram
 
 ---
 
-## 7. Explainable Credit Risk Assessment (ML Microservice)
+## 8. Explainable Credit Risk Assessment (ML Microservice)
 
 The credit-risk service (`backend/risk-service`) runs as an independent, sandboxed Python FastAPI service. 
 
@@ -323,7 +381,7 @@ The credit-risk service (`backend/risk-service`) runs as an independent, sandbox
 
 ---
 
-## 8. Security, Invariants & Cryptographic Defense
+## 9. Security, Invariants & Cryptographic Defense
 
 TrustLedger is architected against a rigorous set of uncompromisable security invariants:
 
@@ -347,7 +405,7 @@ To prevent unauthorized document retention:
 
 ---
 
-## 9. Technology Stack & Repository Layout
+## 10. Technology Stack & Repository Layout
 
 ```
 trustledger/
@@ -416,7 +474,7 @@ trustledger/
 
 ---
 
-## 10. Local Development & Setup Guide
+## 11. Local Development & Setup Guide
 
 ### 10.1 Prerequisites
 - **Node.js:** v20.x or v22.x LTS
@@ -490,7 +548,7 @@ npm run test:risk
 
 ---
 
-## 11. Honesty & Architecture Disclosures (H-1 to H-8)
+## 12. Honesty & Architecture Disclosures (H-1 to H-8)
 
 In the spirit of hackathon integrity and regulatory clarity, the TrustLedger team explicitly states the following operational boundaries:
 
