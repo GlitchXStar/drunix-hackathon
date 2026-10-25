@@ -6,7 +6,7 @@ import { Providers } from "./providers";
 
 export const metadata: Metadata = {
   title: "TrustLedger | Consent-based MSME verification",
-  description: "NPCI × Drunix Hackathon prototype for consent-based MSME verification.",
+  description: "TrustLedger — Consent-Based MSME Verification & Credit Risk Assessment on Drunix.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

@@ -9,6 +9,8 @@ import { useAuth, dashboardPath } from "../lib/auth-context";
 export default function RegisterPage() {
   const router = useRouter();
   const { refresh } = useAuth();
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const [form, setForm] = useState({
     fullName: "",
@@ -147,11 +149,21 @@ export default function RegisterPage() {
               <div className="form-grid">
                 <div>
                   <label htmlFor="newPassword">Password</label>
-                  <input id="newPassword" type="password" placeholder="Create a password (min 12 chars)" value={form.newPassword} onChange={set("newPassword")} />
+                  <div className="password-field">
+                    <input id="newPassword" type={showNewPassword ? "text" : "password"} placeholder="Create a password (min 12 chars)" value={form.newPassword} onChange={set("newPassword")} />
+                    <button type="button" className="password-toggle-btn" onClick={() => setShowNewPassword(!showNewPassword)} aria-label={showNewPassword ? "Hide password" : "Show password"}>
+                      {showNewPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label htmlFor="confirmPassword">Confirm password</label>
-                  <input id="confirmPassword" type="password" placeholder="Confirm password" value={form.confirmPassword} onChange={set("confirmPassword")} />
+                  <div className="password-field">
+                    <input id="confirmPassword" type={showConfirmPassword ? "text" : "password"} placeholder="Confirm password" value={form.confirmPassword} onChange={set("confirmPassword")} />
+                    <button type="button" className="password-toggle-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? "Hide password" : "Show password"}>
+                      {showConfirmPassword ? "Hide" : "Show"}
+                    </button>
+                  </div>
                 </div>
               </div>
             </fieldset>

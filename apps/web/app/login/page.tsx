@@ -134,13 +134,14 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <span
-                aria-hidden="true"
-                style={{ cursor: "pointer" }}
+              <button
+                type="button"
+                className="password-toggle-btn"
+                aria-label={showPassword ? "Hide password" : "Show password"}
                 onClick={() => setShowPassword(!showPassword)}
               >
-                {showPassword ? "◎" : "◉"}
-              </span>
+                {showPassword ? "Hide" : "Show"}
+              </button>
             </div>
 
             <button

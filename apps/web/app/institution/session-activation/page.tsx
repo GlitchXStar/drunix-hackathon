@@ -175,7 +175,7 @@ export default function SessionActivationPage() {
                         >
                           <div>
                             <span style={{ fontWeight: 600, fontSize: "13px" }}>
-                              {c.businessRef.slice(0, 8)}... (DOCUMENTS)
+                              {c.consentId.slice(0, 8)}... (DOCUMENTS)
                             </span>
                             <div style={{ fontSize: "11px", color: "#666", fontFamily: "monospace" }}>
                               {c.consentId}
