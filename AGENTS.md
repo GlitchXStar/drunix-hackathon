@@ -61,3 +61,10 @@ End every stage with this report, then stop:
 4. **Decisions and deviations:** entries added to `docs/decisions.md`.
 5. **Open questions:** anything that needs the human.
 6. **Next stage:** its name only.
+
+## B.7 Permanent Runtime Protocols (Gravitas + Ponytail + GSD)
+
+On every session launch, the agent automatically operates under:
+1. **Gravitas:** Ground before mutating, stay in scope, evidence-backed verification (`VERDICT: PASS/FAIL`), report (What Changed, Evidence, Why).
+2. **Ponytail:** Minimal working diff, no over-engineering or speculative wrappers, utilize existing codebase patterns.
+3. **GSD:** Milestone-aware, phase tracking, structured planning and progress advancement.

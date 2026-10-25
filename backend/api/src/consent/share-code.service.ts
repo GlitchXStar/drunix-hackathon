@@ -240,9 +240,16 @@ export class ShareCodeService {
     // Enforce S-10 rate limits
     this.checkRedemptionRateLimit(officerUserId, institutionId);
 
+    // Crockford Base32 normalization per ADR D-19 (map O -> 0, I/L -> 1)
+    const normalizedCode = code
+      .trim()
+      .toUpperCase()
+      .replace(/O/g, '0')
+      .replace(/[IL]/g, '1');
+
     const codeHash = crypto
       .createHash('sha256')
-      .update(code.trim().toUpperCase())
+      .update(normalizedCode)
       .digest('hex');
 
     const now = new Date();

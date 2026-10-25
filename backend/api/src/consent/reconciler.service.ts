@@ -106,4 +106,45 @@ export class ReconcilerService {
 
     return existing;
   }
+
+  /**
+   * Synchronizes database projection with ledger status when state disagrees (I-2: Ledger wins)
+   */
+  async reconcileConsentStatus(
+    consentId: string,
+    institutionId: string,
+    scopeType: string,
+  ): Promise<string> {
+    const grant = await this.prisma.consentGrant.findUnique({
+      where: { consentId },
+    });
+    if (!grant) return 'NOT_FOUND';
+
+    const check = await this.ledgerService.checkAccess(consentId, institutionId, scopeType);
+    if (check.reasonCode === 'CONSENT_REVOKED' && grant.status !== 'REVOKED') {
+      this.logger.warn(`Reconciler reconciling REVOKED status from ledger for consent ${consentId} (I-2)`);
+      await this.prisma.consentGrant.update({
+        where: { id: grant.id },
+        data: { status: 'REVOKED' },
+      });
+      await this.prisma.accessSession.updateMany({
+        where: { consentId, status: { in: ['PENDING_OTP', 'ACTIVE'] } },
+        data: { status: 'REVOKED' },
+      });
+      return 'REVOKED';
+    }
+    if (check.reasonCode === 'CONSENT_EXPIRED' && grant.status !== 'EXPIRED') {
+      this.logger.warn(`Reconciler reconciling EXPIRED status from ledger for consent ${consentId} (I-2)`);
+      await this.prisma.consentGrant.update({
+        where: { id: grant.id },
+        data: { status: 'EXPIRED' },
+      });
+      await this.prisma.accessSession.updateMany({
+        where: { consentId, status: { in: ['PENDING_OTP', 'ACTIVE'] } },
+        data: { status: 'EXPIRED' },
+      });
+      return 'EXPIRED';
+    }
+    return grant.status;
+  }
 }

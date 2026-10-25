@@ -314,6 +314,38 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
         }),
       );
     });
+
+    it('should normalize Crockford Base32 input (O -> 0, I/L -> 1) on redemption (D-19)', async () => {
+      // Canonically generated code ending in 0 and 1
+      const canonCode = 'ABCD0011';
+      const canonHash = crypto.createHash('sha256').update(canonCode).digest('hex');
+
+      mockPrisma.profileShareCode.findFirst.mockResolvedValue({
+        id: 'sharecode-db-norm',
+        businessId: testBusinessId,
+        codeHash: canonHash,
+        consentDurationMinutes: 1440,
+        usedAt: null,
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      });
+
+      // Officer inputs confusing letters 'O' instead of '0', and 'I' / 'L' instead of '1'
+      const visualMisreadInput = 'abcdooil'; // lower-case with o and i/l
+      const res = await shareCodeService.redeemShareCode(
+        testInstitutionId,
+        'user-officer-norm',
+        visualMisreadInput,
+      );
+
+      expect(res).toHaveProperty('consentId');
+      expect(mockPrisma.profileShareCode.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            codeHash: canonHash,
+          }),
+        }),
+      );
+    });
   });
 
   describe('RequestsService', () => {
@@ -616,6 +648,64 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
             consentId: 'consent-orphan-123',
             businessRef: testBusinessRef,
           }),
+        }),
+      );
+    });
+
+    it('should reconcile database projection when ledger reports consent is REVOKED (I-2)', async () => {
+      mockPrisma.consentGrant.findUnique.mockResolvedValue({
+        id: 'grant-rev-123',
+        consentId: 'consent-rev-123',
+        status: 'ACTIVE',
+      });
+      mockLedger.checkAccess.mockResolvedValueOnce({
+        allowed: false,
+        reasonCode: 'CONSENT_REVOKED',
+      });
+
+      const result = await reconcilerService.reconcileConsentStatus(
+        'consent-rev-123',
+        testInstitutionId,
+        'PROFILE',
+      );
+
+      expect(result).toBe('REVOKED');
+      expect(mockPrisma.consentGrant.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'grant-rev-123' },
+          data: { status: 'REVOKED' },
+        }),
+      );
+      expect(mockPrisma.accessSession.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { consentId: 'consent-rev-123', status: { in: ['PENDING_OTP', 'ACTIVE'] } },
+          data: { status: 'REVOKED' },
+        }),
+      );
+    });
+
+    it('should reconcile database projection when ledger reports consent is EXPIRED (I-2)', async () => {
+      mockPrisma.consentGrant.findUnique.mockResolvedValue({
+        id: 'grant-exp-123',
+        consentId: 'consent-exp-123',
+        status: 'ACTIVE',
+      });
+      mockLedger.checkAccess.mockResolvedValueOnce({
+        allowed: false,
+        reasonCode: 'CONSENT_EXPIRED',
+      });
+
+      const result = await reconcilerService.reconcileConsentStatus(
+        'consent-exp-123',
+        testInstitutionId,
+        'PROFILE',
+      );
+
+      expect(result).toBe('EXPIRED');
+      expect(mockPrisma.consentGrant.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'grant-exp-123' },
+          data: { status: 'EXPIRED' },
         }),
       );
     });
