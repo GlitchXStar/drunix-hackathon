@@ -13,6 +13,7 @@ import { StorageModule } from './storage/storage.module';
 import { DocumentsModule } from './documents/documents.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ConsentModule } from './consent/consent.module';
+import { SessionsModule } from './sessions/sessions.module';
 import { SessionGuard } from './auth/session.guard';
 import { RolesGuard } from './policy/roles.guard';
 
@@ -31,6 +32,7 @@ import { RolesGuard } from './policy/roles.guard';
     DocumentsModule,
     NotificationsModule,
     ConsentModule,
+    SessionsModule,
   ],
   controllers: [AppController],
   providers: [

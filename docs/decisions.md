@@ -65,5 +65,13 @@ This file records all architectural decisions, invariant justifications, and app
     - Keep `apps/web/` untouched under `apps/` for frontend ownership.
     - Update npm workspaces (`backend/api`, `apps/*`), lockfile, CI workflows, docker-compose build context, chaincode deploy scripts, and documentation paths.
   - **Status:** Implemented and verified.
+- **D-23 Server-side document rendering and watermark burning engine (@napi-rs/canvas & pdfjs-dist):**
+  - **Context:** SPEC §7, D-6, and S-6 require server-side rasterization for PDF, PNG, and JPEG documents with a security watermark (`${institutionName} · ${officerEmail} · ${timestampUtc}`) burned directly into the image pixel buffer (a CSS overlay alone is strictly prohibited). Plaintext must never touch persistent storage, and rendering must avoid OS-level GTK/Cairo native package installation issues across Windows, Linux, and containerized targets.
+  - **Decision:**
+    - Use `@napi-rs/canvas` (Rust-based Skia canvas bindings with prebuilt native binaries for all major platforms) for fast, zero-dependency server-side 2D drawing, image decoding/re-encoding, and diagonal watermark burning.
+    - Use `pdfjs-dist` (Mozilla PDF.js legacy Node.js build) for pure JavaScript/WebAssembly server-side PDF page parsing and rasterization into the Skia canvas.
+    - Limit rendering dimensions to `MAX_DIMENSION = 2048px` to mitigate denial-of-service risks (memory exhaustion).
+    - Watermark format: `${institutionName} · ${officerEmail} · ${timestampUtc}` rendered with semi-transparent fill (`rgba(220, 38, 38, 0.30)`) rotated at -30 degrees diagonally across the entire page canvas.
+  - **Status:** Implemented and verified in Stage 6.
 
 
