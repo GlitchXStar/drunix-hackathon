@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { LedgerService, CheckAccessResponse } from './ledger.interface';
 import { PrismaService } from '../prisma.service';
 
@@ -48,7 +48,7 @@ interface OnChainAttestation {
 }
 
 @Injectable()
-export class InMemoryLedgerService implements LedgerService {
+export class InMemoryLedgerService implements LedgerService, OnModuleInit {
   private readonly logger = new Logger(InMemoryLedgerService.name);
   private healthy = true;
 
@@ -88,6 +88,148 @@ export class InMemoryLedgerService implements LedgerService {
       status: 'ACTIVE',
     });
     this.institutionByMsp.set('NbfcOrgMSP', 'Nbfc');
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.syncFromDatabase();
+  }
+
+  async syncFromDatabase(): Promise<void> {
+    try {
+      const businesses = await this.prisma.business.findMany();
+      for (const b of businesses) {
+        if (!this.businesses.has(b.businessRef)) {
+          this.businesses.set(b.businessRef, {
+            businessRef: b.businessRef,
+            createdAt: b.createdAt ? b.createdAt.toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+
+      const institutions = await this.prisma.institution.findMany();
+      for (const inst of institutions) {
+        if (!this.institutions.has(inst.id)) {
+          this.institutions.set(inst.id, {
+            instId: inst.id,
+            mspId: inst.mspId,
+            type: inst.type,
+            status: inst.status,
+          });
+          this.institutionByMsp.set(inst.mspId, inst.id);
+        }
+      }
+
+      const consents = await this.prisma.consentGrant.findMany();
+      for (const c of consents) {
+        if (!this.consents.has(c.consentId)) {
+          this.consents.set(c.consentId, {
+            consentId: c.consentId,
+            businessRef: c.businessRef,
+            institutionId: c.institutionId,
+            scopeType: c.scopeType,
+            docRefs: c.docRefs || [],
+            purposeCode: 'VERIFICATION',
+            expiresAt: c.expiresAt ? c.expiresAt.toISOString() : new Date(Date.now() + 86400000).toISOString(),
+            status: c.status,
+            approvalEvidenceHash: 'synced-from-db',
+          });
+        }
+      }
+
+      const bizMap = new Map(businesses.map((b) => [b.id, b.businessRef]));
+      const docs = await this.prisma.document.findMany();
+      for (const d of docs) {
+        if (!this.documents.has(d.docRef)) {
+          this.documents.set(d.docRef, {
+            docRef: d.docRef,
+            businessRef: bizMap.get(d.businessId) || d.businessId,
+            docType: d.docType,
+            contentHash: d.contentHash,
+            version: d.version,
+            registeredAt: d.createdAt ? d.createdAt.toISOString() : new Date().toISOString(),
+          });
+        }
+      }
+
+      this.logger.log(
+        `Preloaded in-memory ledger with ${businesses.length} businesses, ${institutions.length} institutions, ${consents.length} consents, and ${docs.length} documents`,
+      );
+    } catch (err) {
+      this.logger.warn(`Could not sync database entities to in-memory ledger: ${err}`);
+    }
+  }
+
+  private async ensureConsent(consentId: string): Promise<void> {
+    if (!consentId) return;
+    if (!this.consents.has(consentId)) {
+      try {
+        const c = await this.prisma.consentGrant.findUnique({
+          where: { consentId },
+        });
+        if (c) {
+          this.consents.set(c.consentId, {
+            consentId: c.consentId,
+            businessRef: c.businessRef,
+            institutionId: c.institutionId,
+            scopeType: c.scopeType,
+            docRefs: c.docRefs || [],
+            purposeCode: 'VERIFICATION',
+            expiresAt: c.expiresAt ? c.expiresAt.toISOString() : new Date(Date.now() + 86400000).toISOString(),
+            status: c.status,
+            approvalEvidenceHash: 'synced-from-db',
+          });
+        }
+      } catch (err) {
+        this.logger.warn(`Could not verify consent ${consentId} in database: ${err}`);
+      }
+    }
+  }
+
+  private async ensureBusiness(businessRef: string): Promise<void> {
+    if (!businessRef) return;
+    if (!this.businesses.has(businessRef)) {
+      try {
+        const biz = await this.prisma.business.findUnique({
+          where: { businessRef },
+        });
+        if (biz) {
+          this.businesses.set(biz.businessRef, {
+            businessRef: biz.businessRef,
+            createdAt: biz.createdAt ? biz.createdAt.toISOString() : new Date().toISOString(),
+          });
+        }
+      } catch (err) {
+        this.logger.warn(`Could not verify business ${businessRef} in database: ${err}`);
+      }
+    }
+  }
+
+  private async ensureInstitution(institutionId: string): Promise<void> {
+    if (!institutionId) return;
+    if (!this.institutions.has(institutionId) && !this.institutionByMsp.has(institutionId)) {
+      try {
+        const inst = await this.prisma.institution.findFirst({
+          where: {
+            OR: [
+              { id: institutionId },
+              { mspId: institutionId },
+              { name: institutionId },
+            ],
+          },
+        });
+        if (inst) {
+          this.institutions.set(inst.id, {
+            instId: inst.id,
+            mspId: inst.mspId,
+            type: inst.type,
+            status: inst.status,
+          });
+          this.institutionByMsp.set(inst.mspId, inst.id);
+        }
+      } catch (err) {
+        this.logger.warn(`Could not verify institution ${institutionId} in database: ${err}`);
+      }
+    }
   }
 
   setHealthy(isHealthy: boolean): void {
@@ -148,11 +290,13 @@ export class InMemoryLedgerService implements LedgerService {
           result = this.registerBusiness(actingOrgMsp, args[0]);
           break;
         case 'RegisterDocument':
+          await this.ensureBusiness(args[1]);
           result = this.registerDocument(actingOrgMsp, args[0], args[1], args[2], args[3]);
           break;
         case 'ReplaceDocument': {
           const existing = this.documents.get(args[0]);
           if (!existing) throw new Error(`document ${args[0]} not found`);
+          await this.ensureBusiness(existing.businessRef);
           result = this.registerDocument(
             actingOrgMsp,
             existing.docRef,
@@ -163,6 +307,8 @@ export class InMemoryLedgerService implements LedgerService {
           break;
         }
         case 'CreateConsent':
+          await this.ensureBusiness(args[1]);
+          await this.ensureInstitution(args[2]);
           result = this.createConsent(
             actingOrgMsp,
             args[0],
@@ -179,6 +325,7 @@ export class InMemoryLedgerService implements LedgerService {
           result = this.revokeConsent(actingOrgMsp, args[0]);
           break;
         case 'IssueAttestation':
+          await this.ensureBusiness(args[1]);
           result = this.issueAttestation(actingOrgMsp, args[0], args[1], args[2], args[3], args[4]);
           break;
         case 'UpdateAttestationStatus':
@@ -188,6 +335,7 @@ export class InMemoryLedgerService implements LedgerService {
           result = this.recordAccessEvent(actingOrgMsp, args[0], args[1], args[2], args[3], args[4]);
           break;
         case 'RecordAssessment':
+          await this.ensureBusiness(args[1]);
           result = this.recordAssessment(actingOrgMsp, args[0], args[1], args[2], args[3], args[4]);
           break;
         default:
@@ -219,6 +367,7 @@ export class InMemoryLedgerService implements LedgerService {
           break;
         }
         case 'GetAttestations':
+          await this.ensureBusiness(args[0]);
           result = this.getAttestations(actingOrgMsp, args[0], args[1]);
           break;
         case 'GetHistory':
@@ -247,6 +396,7 @@ export class InMemoryLedgerService implements LedgerService {
   ): Promise<CheckAccessResponse> {
     this.ensureHealthy();
 
+    await this.ensureConsent(consentId);
     const consent = this.consents.get(consentId);
     if (!consent) {
       return { allowed: false, reasonCode: 'CONSENT_NOT_FOUND' };
@@ -258,6 +408,16 @@ export class InMemoryLedgerService implements LedgerService {
       const instId = this.institutionByMsp.get(institutionId);
       if (instId) {
         inst = this.institutions.get(instId);
+      }
+    }
+    if (!inst) {
+      await this.ensureInstitution(institutionId);
+      inst = this.institutions.get(institutionId);
+      if (!inst) {
+        const instId = this.institutionByMsp.get(institutionId);
+        if (instId) {
+          inst = this.institutions.get(instId);
+        }
       }
     }
 
@@ -296,8 +456,14 @@ export class InMemoryLedgerService implements LedgerService {
 
     // Document in scope check
     if (scopeType === 'DOCUMENTS') {
-      if (!docRef || !consent.docRefs.includes(docRef)) {
-        return { allowed: false, reasonCode: 'DOC_NOT_IN_SCOPE' };
+      if (docRef) {
+        if (!consent.docRefs.includes(docRef)) {
+          return { allowed: false, reasonCode: 'DOC_NOT_IN_SCOPE' };
+        }
+      } else {
+        if (!consent.docRefs || consent.docRefs.length === 0) {
+          return { allowed: false, reasonCode: 'DOC_NOT_IN_SCOPE' };
+        }
       }
     }
 

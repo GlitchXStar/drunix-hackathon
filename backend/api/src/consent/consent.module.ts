@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { AuditModule } from '../audit/audit.module';
+import { AuthModule } from '../auth/auth.module';
 import { OtpModule } from '../otp/otp.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { LedgerModule } from '../ledger/ledger.module';
@@ -13,7 +14,7 @@ import { BusinessConsentController } from './business-consent.controller';
 import { InstitutionConsentController } from './institution-consent.controller';
 
 @Module({
-  imports: [AuditModule, OtpModule, NotificationsModule, LedgerModule],
+  imports: [AuditModule, AuthModule, OtpModule, NotificationsModule, LedgerModule],
   controllers: [BusinessConsentController, InstitutionConsentController],
   providers: [
     PrismaService,

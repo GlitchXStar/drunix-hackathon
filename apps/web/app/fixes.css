@@ -28,3 +28,367 @@
   .validation-guidance,
   .prototype-action-note { font-size: .75rem; }
 }
+
+/* Universal input field styling matching TrustLedger design system */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input:not([type]),
+select,
+textarea {
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 13px;
+  color: #1a1a18;
+  background: #ffffff;
+  border: 1px solid #cbcbc4;
+  border-radius: 6px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="date"],
+input:not([type]),
+select {
+  height: 44px;
+  padding: 0 14px;
+}
+
+textarea {
+  padding: 12px 14px;
+  resize: vertical;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="date"]:focus,
+input:not([type]):focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #111111;
+  box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.08);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #8c8c85;
+}
+
+/* Form input group for search, lookup, or activation bars */
+.input-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 8px;
+  margin-bottom: 16px;
+}
+
+.input-group input {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-group button,
+.input-group .dark-button,
+.input-group .light-button {
+  flex-shrink: 0;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Form field stacking for institutional workflow cards */
+.form-fields {
+  display: grid;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.form-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.kyc-review-form label:not(.review-checklist label):not(.outcome-options label),
+.attestation-issue-form label:not(.issue-confirm),
+.request-form label:not(.evidence-checks label),
+.redemption-card label:not(.prototype-consent),
+.lookup-card label {
+  display: block;
+  margin: 12px 0 6px;
+  color: #4d4d47;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+fieldset input[type="text"],
+fieldset input:not([type]),
+.redemption-card input[type="text"],
+.redemption-card input:not([type]),
+.request-form input[type="text"],
+.request-form input:not([type]),
+.kyc-review-form input[type="text"],
+.kyc-review-form input:not([type]),
+.attestation-issue-form input[type="text"],
+.attestation-issue-form input:not([type]),
+.lookup-card input[type="text"],
+.lookup-card input:not([type]) {
+  width: 100%;
+}
+
+/* Info and status alerts */
+.info-alert {
+  margin: 1.25rem 0;
+  border: 1px solid #7c98b3;
+  background: #f0f6fc;
+  color: #1e3a5f;
+  padding: 1rem 1.1rem;
+  border-radius: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.info-alert strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+/* Delivery Destination Notice */
+.delivery-notice {
+  margin: 16px 0;
+  padding: 12px 16px;
+  border-radius: 6px;
+  background: #f4f4f1;
+  border: 1px solid #d3d3cc;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #333330;
+}
+.delivery-notice.dev-mode {
+  background: #fbfbf9;
+  border-left: 3px solid #b26b00;
+}
+.delivery-notice strong {
+  display: inline-block;
+  color: #1a1a18;
+  margin-right: 4px;
+}
+.delivery-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+.delivery-badge.dev {
+  background: #fff0d4;
+  color: #8f5300;
+  border: 1px solid #fed391;
+}
+.delivery-badge.real {
+  background: #e8f0e6;
+  color: #396238;
+  border: 1px solid #c2dec0;
+}
+
+/* Development OTP Box */
+.dev-otp-card {
+  margin: 16px 0 20px;
+  padding: 16px;
+  border-radius: 8px;
+  background: #fdfcf7;
+  border: 1px dashed #d99b26;
+}
+.dev-otp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.dev-otp-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8f5300;
+}
+.dev-otp-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #eed09d;
+  border-radius: 6px;
+}
+.dev-otp-code-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dev-otp-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #111111;
+}
+.dev-otp-meta {
+  font-size: 10px;
+  color: #777770;
+}
+.dev-otp-btn {
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  cursor: pointer;
+  border: 1px solid #111111;
+  background: #111111;
+  color: #ffffff;
+  transition: opacity 0.15s ease;
+  white-space: nowrap;
+}
+.dev-otp-btn:hover {
+  opacity: 0.9;
+}
+.dev-otp-btn.copied {
+  background: #2e7d32;
+  border-color: #2e7d32;
+}
+
+/* OTP 6-digit input styling */
+.otp-input-field {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 20px !important;
+  font-weight: 600;
+  letter-spacing: 0.35em;
+  text-align: center;
+  width: 100%;
+  max-width: 260px;
+  height: 48px !important;
+  margin: 6px 0 16px;
+}
+
+.otp-button-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+/* Approval OTP Modal */
+.tl-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 17, 17, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.tl-modal-dialog {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.22);
+  border: 1px solid #e5e5df;
+  overflow: hidden;
+  animation: tlModalFade 0.18s ease-out;
+}
+
+@keyframes tlModalFade {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tl-modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #f0f0ea;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.tl-modal-header h3 {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #111111;
+}
+
+.tl-modal-header p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: #666660;
+}
+
+.tl-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 20px;
+  line-height: 1;
+  color: #888880;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.tl-modal-close:hover {
+  color: #111111;
+}
+
+.tl-modal-body {
+  padding: 20px 24px;
+}
+
+.tl-modal-req-summary {
+  background: #fafaf7;
+  border: 1px solid #eaeae4;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  color: #444440;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tl-modal-footer {
+  padding: 16px 24px;
+  background: #fbfbf9;
+  border-top: 1px solid #f0f0ea;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+

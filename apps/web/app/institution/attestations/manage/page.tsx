@@ -1,6 +1,144 @@
-import Link from "next/link";
-import AppSidebar from "../../../components/AppSidebar";
+"use client";
 
-const issued = [["ATT-BA-2026-0048", "Zenith Fabrication Works", "KYC_BASIC", "VALID", "18 Oct 2027"], ["ATT-BA-2026-0031", "Mitra Agro Foods", "KYC_BASIC", "SUSPENDED", "03 Sep 2027"], ["ATT-BA-2026-0012", "Northstar Components", "KYC_BASIC", "REVOKED", "14 Jul 2027"]];
-function Side() { return <AppSidebar role="kycOfficer" />; }
-export default function ManageAttestationsPage() { return <main className="business-app institution-app"><Side /><section className="business-main"><div className="business-prototype">Prototype · synthetic data only · Bank A may change only attestations it issued</div><header className="business-header"><div><p className="kicker">Bank A / issued verification records</p><h1>Manage attestations</h1><p>View the lifecycle of Bank A&apos;s own verification records and take a controlled status action.</p></div><Link className="dark-button" href="/institution/attestations/issue">Issue attestation <span>→</span></Link></header><section className="officer-table-card"><div className="section-card-head"><div><p className="kicker">Issuer records</p><h2>Bank A attestations</h2></div><span>Issuer-scoped access</span></div><div className="vault-table-wrap"><table className="vault-table"><thead><tr><th>Attestation ID</th><th>Business</th><th>Type</th><th>Status</th><th>Valid until</th><th>Action</th></tr></thead><tbody>{issued.map(([id, business, type, status, valid]) => <tr key={id}><td><strong>{id}</strong><small>Ledger reference available after issue</small></td><td>{business}</td><td>{type}</td><td><span className={`status ${status === "VALID" ? "registered" : status === "SUSPENDED" ? "pending" : "cancelled"}`}>{status}</span></td><td>{valid}</td><td>{status === "VALID" ? <button className="table-link">Suspend or revoke</button> : <span className="table-muted">No reinstatement</span>}</td></tr>)}</tbody></table></div></section><section className="attestation-lifecycle"><div><p className="kicker">Status rule</p><h2>Revoke is final.</h2></div><p>A VALID attestation may be suspended or revoked by Bank A with a reason code. A suspended record may be revoked. Neither suspended nor revoked records can be reinstated; a new review creates a new attestation.</p></section></section></main>; }
+import Link from "next/link";
+import { useState, useCallback } from "react";
+import AppSidebar from "../../../components/AppSidebar";
+import { useAuth, sidebarRole } from "../../../lib/auth-context";
+import * as api from "../../../lib/api";
+
+const REASON_CODES = [
+  { id: "DOCUMENTS_SUPERSEDED", label: "Documents superseded or replaced by MSME" },
+  { id: "FRAUD_SUSPECTED", label: "Fraud or misrepresentation suspected" },
+  { id: "BUSINESS_DISSOLVED", label: "Business dissolution or deregistration" },
+  { id: "OFFICER_REVIEW_ERROR", label: "Officer review error identified during internal audit" },
+  { id: "POLICY_NON_COMPLIANCE", label: "Regulatory policy non-compliance" },
+];
+
+export default function ManageAttestationsPage() {
+  const { user } = useAuth();
+  const role = sidebarRole(user?.role || "KYC_OFFICER");
+
+  const [attestationId, setAttestationId] = useState("");
+  const [targetStatus, setTargetStatus] = useState<"SUSPENDED" | "REVOKED">("SUSPENDED");
+  const [reasonCode, setReasonCode] = useState("DOCUMENTS_SUPERSEDED");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const handleUpdateStatus = useCallback(async () => {
+    setError(null);
+    setSuccess(null);
+    if (!attestationId.trim()) {
+      setError("Please specify the attestation ID.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await api.updateAttestationStatus(attestationId.trim(), targetStatus, reasonCode);
+      setSuccess(`Attestation ${attestationId.trim()} has been updated to ${targetStatus} on Drunix.`);
+    } catch (err: any) {
+      setError(err?.message || "Failed to update attestation status. Verify issuer authority and D-9 rules.");
+    } finally {
+      setLoading(false);
+    }
+  }, [attestationId, targetStatus, reasonCode]);
+
+  return (
+    <main className="business-app institution-app">
+      <AppSidebar role={role as any} />
+      <section className="business-main">
+        <div className="business-prototype">
+          Prototype · synthetic data only · institutions may change only attestations they issued
+        </div>
+        <header className="business-header">
+          <div>
+            <p className="kicker">Institution / issued verification records</p>
+            <h1>Manage attestations</h1>
+            <p>Execute lifecycle status updates on Drunix for attestations issued by your institution.</p>
+          </div>
+          <Link className="dark-button" href="/institution/attestations/issue">
+            Issue attestation <span>→</span>
+          </Link>
+        </header>
+
+        {error && (
+          <div className="admin-alert" role="alert">
+            <strong>Error</strong>
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="admin-alert" role="status" style={{ borderColor: "var(--color-registered)" }}>
+            <strong>Success</strong>
+            {success}
+          </div>
+        )}
+
+        <div className="request-layout">
+          <section className="request-form">
+            <fieldset>
+              <legend>01 · Target attestation</legend>
+              <label htmlFor="att-id">Attestation ID</label>
+              <input
+                id="att-id"
+                type="text"
+                value={attestationId}
+                onChange={(e) => setAttestationId(e.target.value)}
+                placeholder="Paste the on-chain attestation ID"
+              />
+            </fieldset>
+
+            <fieldset>
+              <legend>02 · Lifecycle transition (Rule D-9)</legend>
+              <label htmlFor="target-status">New status</label>
+              <select
+                id="target-status"
+                value={targetStatus}
+                onChange={(e) => setTargetStatus(e.target.value as "SUSPENDED" | "REVOKED")}
+              >
+                <option value="SUSPENDED">SUSPENDED · Temporarily halt validity (can transition to REVOKED)</option>
+                <option value="REVOKED">REVOKED · Permanently invalidate (terminal status)</option>
+              </select>
+
+              <label htmlFor="reason-code">Operational reason code</label>
+              <select
+                id="reason-code"
+                value={reasonCode}
+                onChange={(e) => setReasonCode(e.target.value)}
+              >
+                {REASON_CODES.map((rc) => (
+                  <option key={rc.id} value={rc.id}>
+                    {rc.id} · {rc.label}
+                  </option>
+                ))}
+              </select>
+            </fieldset>
+
+            <div style={{ marginTop: "1.5rem" }}>
+              <button
+                className="dark-button"
+                onClick={handleUpdateStatus}
+                disabled={loading || !attestationId.trim()}
+              >
+                {loading ? "Recording on Drunix…" : `Confirm ${targetStatus} on ledger →`}
+              </button>
+            </div>
+          </section>
+
+          <aside className="issue-boundary-card">
+            <p className="kicker">D-9 Lifecycle Rules</p>
+            <h2>Status transitions are one-way.</h2>
+            <ul style={{ paddingLeft: "1.2rem", fontSize: "0.9rem", lineHeight: 1.6 }}>
+              <li><strong>VALID → SUSPENDED:</strong> Permitted with reason code.</li>
+              <li><strong>VALID → REVOKED:</strong> Permitted with reason code.</li>
+              <li><strong>SUSPENDED → REVOKED:</strong> Permitted.</li>
+              <li><strong>Reinstatement prohibited:</strong> Neither suspended nor revoked attestations can return to VALID. Issue a new one after fresh review.</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}

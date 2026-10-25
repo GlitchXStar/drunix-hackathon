@@ -64,6 +64,17 @@ export class InstitutionSessionsController {
     return this.sessionsService.activateSession(req.user, id, dto, serverSessionId, userAgent);
   }
 
+  @Get(':id/dev-otp')
+  @Roles(UserRole.KYC_OFFICER)
+  @ApiOperation({ summary: 'Get session activation OTP in development outbox mode' })
+  @ApiResponse({ status: 200, description: 'Development OTP payload' })
+  async getDevOtp(
+    @Req() req: { user: AuthenticatedUser },
+    @Param('id') id: string,
+  ) {
+    return this.sessionsService.getDevOtpForSession(req.user, id);
+  }
+
   @Post(':id/close')
   @HttpCode(HttpStatus.OK)
   @Roles(UserRole.KYC_OFFICER)

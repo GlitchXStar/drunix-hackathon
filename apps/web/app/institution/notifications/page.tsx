@@ -1,12 +1,89 @@
-import AppSidebar from "../../components/AppSidebar";
+"use client";
 
-const notes = [
-  ["New verification request", "Zenith Fabrication Works received Bank A request VR-2026-0184.", "18 Oct 2026 · 10:05 IST", "REQUEST"],
-  ["Consent partially approved", "Two requested evidence items are available in the approved session.", "18 Oct 2026 · 10:14 IST", "CONSENT"],
-  ["Session opened", "P. Deshmukh opened a consented view-only session.", "18 Oct 2026 · 10:24 IST", "ACCESS"],
-  ["Consent expires soon", "VR-2026-0184 expires in under 24 hours.", "18 Oct 2026 · 10:25 IST", "EXPIRY"],
-];
+import { useState, useCallback } from "react";
+import AppSidebar from "../../components/AppSidebar";
+import { useAuth, sidebarRole } from "../../lib/auth-context";
+import { useApi } from "../../lib/hooks";
+import * as api from "../../lib/api";
 
 export default function NotificationsPage() {
-  return <main className="business-app institution-app"><AppSidebar role="institutionAdmin" /><section className="business-main"><div className="business-prototype">Prototype · synthetic data only · notifications contain no document content</div><header className="business-header"><div><p className="kicker">Bank A / notification center</p><h1>Notifications</h1><p>Review tenant-level consent, request and session events relevant to your institution.</p></div><button className="light-button" type="button">Mark all as read</button></header><section className="notification-filters"><button className="active" type="button">All <span>4</span></button><button type="button">Requests</button><button type="button">Consents</button><button type="button">Access</button><button type="button">Expiry</button></section><section className="notification-list">{notes.map(([title, copy, time, type], index) => <article className={index < 2 ? "unread" : ""} key={title}><div className="notification-dot" /><div><p className="kicker">{type}</p><strong>{title}</strong><p>{copy}</p><time>{time}</time></div><button type="button">Mark read</button></article>)}</section><section className="notification-note"><p className="kicker">Privacy notice</p><h2>Events, not private contents.</h2><p>Notifications identify relevant workflow events only. They do not include document pages, bank statements, OTPs, or information beyond what the recipient is already permitted to see.</p></section></section></main>;
+  const { user } = useAuth();
+  const role = sidebarRole(user?.role || "INSTITUTION_ADMIN");
+  const { data: notifications, loading, error, refetch } = useApi(() => api.listNotifications());
+  const [markingId, setMarkingId] = useState<string | null>(null);
+
+  const handleMarkRead = useCallback(async (id: string) => {
+    setMarkingId(id);
+    try {
+      await api.markNotificationRead(id);
+      refetch();
+    } catch {
+      /* ignore */
+    } finally {
+      setMarkingId(null);
+    }
+  }, [refetch]);
+
+  const items = notifications || [];
+
+  return (
+    <main className="business-app institution-app">
+      <AppSidebar role={role as any} />
+      <section className="business-main">
+        <div className="business-prototype">
+          Prototype · synthetic data only · notifications contain no document content
+        </div>
+        <header className="business-header">
+          <div>
+            <p className="kicker">Institution / notification center</p>
+            <h1>Notifications</h1>
+            <p>Review tenant-level consent, request and session events relevant to your institution.</p>
+          </div>
+        </header>
+
+        {error && (
+          <div className="admin-alert" role="alert">
+            <strong>Notice</strong>
+            {error}
+          </div>
+        )}
+
+        <section className="notification-list">
+          {items.map((note) => (
+            <article className={!note.read ? "unread" : ""} key={note.id}>
+              <div className="notification-dot" />
+              <div>
+                <p className="kicker">{note.type}</p>
+                <strong>{note.title}</strong>
+                <p>{note.body}</p>
+                <time>{new Date(note.createdAt).toLocaleString("en-IN")}</time>
+              </div>
+              {!note.read && (
+                <button
+                  type="button"
+                  disabled={markingId === note.id}
+                  onClick={() => handleMarkRead(note.id)}
+                >
+                  {markingId === note.id ? "…" : "Mark read"}
+                </button>
+              )}
+            </article>
+          ))}
+          {!loading && items.length === 0 && (
+            <p style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-muted)" }}>
+              No notifications yet.
+            </p>
+          )}
+        </section>
+
+        <section className="notification-note">
+          <p className="kicker">Privacy notice</p>
+          <h2>Events, not private contents.</h2>
+          <p>
+            Notifications identify relevant workflow events only. They do not include document pages, bank statements, OTPs, or information beyond what the recipient is already permitted to see.
+          </p>
+        </section>
+      </section>
+    </main>
+  );
 }

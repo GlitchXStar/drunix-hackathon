@@ -6,7 +6,9 @@ import {
   ConflictException,
   Inject,
   Logger,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { OtpPurpose, InstitutionStatus, UserRole } from '@prisma/client';
@@ -33,6 +35,7 @@ export class SessionsService {
     @Inject(LEDGER_SERVICE) private readonly ledgerService: LedgerService,
     private readonly documentsService: DocumentsService,
     private readonly rendererService: DocumentRendererService,
+    @Optional() private readonly configService?: ConfigService,
   ) {}
 
   /**
@@ -115,7 +118,7 @@ export class SessionsService {
       });
     }
 
-    const consent = await this.prisma.consentGrant.findUnique({
+    let consent = await this.prisma.consentGrant.findUnique({
       where: { consentId: dto.consentId },
     });
 
@@ -133,14 +136,29 @@ export class SessionsService {
       });
     }
 
-    if (consent.scopeType !== 'DOCUMENTS') {
-      throw new BadRequestException({
-        code: 'SCOPE_MISMATCH',
-        message: 'AccessSessions can only be created for DOCUMENTS scope consents',
-      });
-    }
-
     const now = new Date();
+    if (consent.scopeType !== 'DOCUMENTS') {
+      const docConsent = await this.prisma.consentGrant.findFirst({
+        where: {
+          businessRef: consent.businessRef,
+          institutionId: officer.institutionId,
+          scopeType: 'DOCUMENTS',
+          status: 'ACTIVE',
+          expiresAt: { gt: now },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (docConsent) {
+        consent = docConsent;
+      } else {
+        throw new BadRequestException({
+          code: 'SCOPE_MISMATCH',
+          message:
+            'AccessSessions can only be created for DOCUMENTS scope consents. The provided ID is a PROFILE consent and no approved DOCUMENTS consent exists yet for this business.',
+        });
+      }
+    }
     if (consent.status === 'REVOKED') {
       throw new ForbiddenException({
         code: 'CONSENT_REVOKED',
@@ -179,6 +197,7 @@ export class SessionsService {
         consent.consentId,
         officer.institutionMspId || 'BankAOrgMSP',
         'DOCUMENTS',
+        consent.docRefs?.[0],
       );
     } catch (err) {
       throw new ForbiddenException({
@@ -244,12 +263,140 @@ export class SessionsService {
       },
     });
 
+    const isDevMode =
+      this.configService?.get<string>('DEV_OUTBOX') === '1' &&
+      this.configService?.get<string>('NODE_ENV') !== 'production';
+
     return {
+      id: session.id,
       sessionId: session.id,
+      consentId: consent.consentId,
       status: session.status,
       expiresAt: session.expiresAt.toISOString(),
       challengeId: challenge.challengeId,
-      message: 'Access session created in PENDING_OTP state. Verify OTP to activate.',
+      deliveryChannel: isDevMode ? ('DEV_OUTBOX' as const) : ('SMS' as const),
+      deliveryDestinationMasked: this.maskContact(recipientContact),
+      isDevMode,
+      message: isDevMode
+        ? 'Real SMS/email delivery is not configured in this environment. Local testing uses the development outbox.'
+        : `Activation OTP sent to ${this.maskContact(recipientContact)}.`,
+    };
+  }
+
+  /**
+   * Masks phone numbers (e.g. ******3210) and emails (e.g. o***@domain.com)
+   */
+  maskContact(contact: string): string {
+    if (!contact) return '';
+    const trimmed = contact.trim();
+    if (trimmed.includes('@')) {
+      const atIdx = trimmed.indexOf('@');
+      const local = trimmed.slice(0, atIdx);
+      const domain = trimmed.slice(atIdx + 1);
+      if (!local || !domain) return trimmed;
+      const maskedLocal = local.length > 1 ? `${local[0]}***` : `${local}***`;
+      return `${maskedLocal}@${domain}`;
+    }
+    const digits = trimmed.replace(/\D/g, '');
+    if (digits.length >= 4) {
+      const last4 = digits.slice(-4);
+      return `******${last4}`;
+    }
+    return '******';
+  }
+
+  /**
+   * Retrieve local development OTP for active session activation challenge
+   */
+  async getDevOtpForSession(officer: AuthenticatedUser, sessionId: string) {
+    const isDevMode =
+      this.configService?.get<string>('DEV_OUTBOX') === '1' &&
+      this.configService?.get<string>('NODE_ENV') !== 'production';
+
+    if (!isDevMode) {
+      throw new ForbiddenException(
+        'Development OTP retrieval is disabled in production or when DEV_OUTBOX!=1',
+      );
+    }
+
+    const session = await this.prisma.accessSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    if (!session || session.officerUserId !== officer.id || session.institutionId !== officer.institutionId) {
+      throw new ForbiddenException('Unauthorized access to session');
+    }
+
+    const challenge = await this.prisma.otpChallenge.findFirst({
+      where: {
+        boundEntityId: session.id,
+        purpose: OtpPurpose.SESSION_ACTIVATION,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!challenge) {
+      return {
+        code: null,
+        status: 'PENDING' as const,
+        message: 'No OTP challenge found for this session.',
+      };
+    }
+
+    if (challenge.consumedAt) {
+      return {
+        code: null,
+        status: 'CONSUMED' as const,
+        message: 'This OTP has already been verified and consumed.',
+      };
+    }
+
+    const now = new Date();
+    if (challenge.expiresAt < now) {
+      return {
+        code: null,
+        status: 'EXPIRED' as const,
+        message: 'This OTP has expired. Please create a new session.',
+      };
+    }
+
+    if (challenge.attempts >= 5) {
+      return {
+        code: null,
+        status: 'LOCKED' as const,
+        message: 'Maximum verification attempts exceeded.',
+      };
+    }
+
+    const outboxEntry = await this.prisma.devOutbox.findFirst({
+      where: {
+        body: {
+          contains: challenge.id,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!outboxEntry) {
+      return {
+        code: null,
+        status: 'PENDING' as const,
+        message: 'OTP is being processed in outbox...',
+      };
+    }
+
+    const match = outboxEntry.body.match(/\b(\d{6})\b/);
+    const code = match ? match[1] : null;
+
+    return {
+      code,
+      status: 'ACTIVE' as const,
+      expiresAt: challenge.expiresAt.toISOString(),
+      attemptsRemaining: Math.max(0, 5 - challenge.attempts),
+      recipientMasked: this.maskContact(outboxEntry.recipient),
+      channel: 'DEV_OUTBOX',
+      isDevMode: true,
+      message: 'Development OTP retrieved for testing',
     };
   }
 
@@ -336,6 +483,7 @@ export class SessionsService {
         consent.consentId,
         officer.institutionMspId || 'BankAOrgMSP',
         'DOCUMENTS',
+        consent.docRefs?.[0],
       );
     } catch (err) {
       await this.recordDenial(session, officer, 'LEDGER_UNAVAILABLE');
@@ -360,12 +508,11 @@ export class SessionsService {
         boundEntityId: session.id,
         purpose: OtpPurpose.SESSION_ACTIVATION,
         subjectUserId: officer.id,
-        consumedAt: null,
       },
       orderBy: { createdAt: 'desc' },
     });
 
-    if (!challenge) {
+    if (!challenge || challenge.consumedAt) {
       throw new BadRequestException('No active activation OTP challenge found for this session');
     }
 

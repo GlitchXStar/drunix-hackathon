@@ -6,6 +6,7 @@ import {
   Inject,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
 import { v4 as uuidv4 } from 'uuid';
 import { OtpPurpose, RequestStatus } from '@prisma/client';
@@ -26,6 +27,7 @@ export class RequestsService {
     private readonly otpService: OtpService,
     private readonly auditService: AuditService,
     private readonly notificationsService: NotificationsService,
+    private readonly configService: ConfigService,
     @Inject(LEDGER_SERVICE) private readonly ledgerService: LedgerService,
   ) {}
 
@@ -38,9 +40,26 @@ export class RequestsService {
     officerUserId: string,
     dto: CreateRequestDto,
   ) {
-    const business = await this.prisma.business.findUnique({
-      where: { id: dto.businessId },
-    });
+    let business: any = null;
+    try {
+      business = await this.prisma.business.findUnique({
+        where: { id: dto.businessId },
+      });
+    } catch {
+      // In MongoDB, non-ObjectId hex strings throw Malformed ObjectID on id lookups
+      business = await this.prisma.business.findUnique({
+        where: { businessRef: dto.businessId },
+      });
+    }
+    if (!business) {
+      try {
+        business = await this.prisma.business.findUnique({
+          where: { businessRef: dto.businessId },
+        });
+      } catch {
+        // ignore
+      }
+    }
     if (!business) {
       throw new NotFoundException('Business profile not found');
     }
@@ -151,6 +170,28 @@ export class RequestsService {
   }
 
   /**
+   * Masks phone numbers (e.g. ******3210) and emails (e.g. o***@domain.com)
+   */
+  maskContact(contact: string): string {
+    if (!contact) return '';
+    const trimmed = contact.trim();
+    if (trimmed.includes('@')) {
+      const atIdx = trimmed.indexOf('@');
+      const local = trimmed.slice(0, atIdx);
+      const domain = trimmed.slice(atIdx + 1);
+      if (!local || !domain) return trimmed;
+      const maskedLocal = local.length > 1 ? `${local[0]}***` : `${local}***`;
+      return `${maskedLocal}@${domain}`;
+    }
+    const digits = trimmed.replace(/\D/g, '');
+    if (digits.length >= 4) {
+      const last4 = digits.slice(-4);
+      return `******${last4}`;
+    }
+    return '******';
+  }
+
+  /**
    * Business owner requests approval OTP challenge bound to requestId (W2 step 4)
    */
   async issueApprovalOtp(businessId: string, ownerUserId: string, requestId: string) {
@@ -167,7 +208,12 @@ export class RequestsService {
     const user = await this.prisma.user.findUnique({
       where: { id: ownerUserId },
     });
-    const recipientContact = user?.phone || user?.email || 'owner@example.com';
+    const recipientContact = user?.phone?.trim() || user?.email?.trim() || 'owner@example.com';
+    const isPhone = !!(user?.phone && user.phone.trim().length > 0);
+
+    const isDevMode =
+      this.configService.get<string>('DEV_OUTBOX') === '1' &&
+      this.configService.get<string>('NODE_ENV') !== 'production';
 
     const challenge = await this.otpService.createChallenge({
       purpose: OtpPurpose.CUSTOMER_APPROVAL,
@@ -190,9 +236,126 @@ export class RequestsService {
       metadata: { purpose: 'CUSTOMER_APPROVAL', boundEntityId: request.id },
     });
 
+    const maskedContact = this.maskContact(recipientContact);
+
     return {
+      requestId: request.id,
       challengeId: challenge.challengeId,
-      message: 'Approval OTP issued to business owner',
+      deliveryChannel: isDevMode ? ('DEV_OUTBOX' as const) : isPhone ? ('SMS' as const) : ('EMAIL' as const),
+      deliveryDestinationMasked: maskedContact,
+      isDevMode,
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+      message: isDevMode
+        ? 'Real SMS/email delivery is not configured in this environment. Local testing uses the development outbox.'
+        : `Approval OTP sent to ${maskedContact} via ${isPhone ? 'SMS' : 'email'}.`,
+    };
+  }
+
+  /**
+   * Retrieve local development OTP for active request approval challenge
+   */
+  async getDevOtpForRequest(
+    businessId: string,
+    ownerUserId: string,
+    requestId: string,
+  ) {
+    const isDevMode =
+      this.configService.get<string>('DEV_OUTBOX') === '1' &&
+      this.configService.get<string>('NODE_ENV') !== 'production';
+
+    if (!isDevMode) {
+      throw new ForbiddenException(
+        'Development OTP retrieval is disabled in production or when DEV_OUTBOX!=1',
+      );
+    }
+
+    const request = await this.prisma.accessRequest.findFirst({
+      where: {
+        id: requestId,
+        businessId,
+      },
+    });
+
+    if (!request) {
+      throw new NotFoundException('Access request not found');
+    }
+
+    if (!request.approvalOtpChallengeId) {
+      return {
+        code: null,
+        status: 'PENDING' as const,
+        message: 'No OTP challenge has been requested for this access request.',
+      };
+    }
+
+    const challenge = await this.prisma.otpChallenge.findUnique({
+      where: { id: request.approvalOtpChallengeId },
+    });
+
+    if (
+      !challenge ||
+      challenge.subjectUserId !== ownerUserId ||
+      challenge.boundEntityId !== request.id
+    ) {
+      throw new ForbiddenException('Unauthorized access to OTP challenge');
+    }
+
+    if (challenge.consumedAt) {
+      return {
+        code: null,
+        status: 'CONSUMED' as const,
+        message: 'This OTP has already been verified and consumed.',
+      };
+    }
+
+    const now = new Date();
+    if (challenge.expiresAt < now) {
+      return {
+        code: null,
+        status: 'EXPIRED' as const,
+        message: 'This OTP has expired. Please request a new OTP.',
+      };
+    }
+
+    if (challenge.attempts >= 5) {
+      return {
+        code: null,
+        status: 'LOCKED' as const,
+        message: 'Maximum verification attempts exceeded. Please request a new OTP.',
+      };
+    }
+
+    // Lookup latest entry in DevOutbox matching this challenge
+    const outboxEntry = await this.prisma.devOutbox.findFirst({
+      where: {
+        body: {
+          contains: challenge.id,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!outboxEntry) {
+      return {
+        code: null,
+        status: 'PENDING' as const,
+        message: 'OTP is being processed in outbox...',
+      };
+    }
+
+    // Extract the 6-digit OTP from the body
+    const match = outboxEntry.body.match(/\b(\d{6})\b/);
+    const code = match ? match[1] : null;
+
+    return {
+      code,
+      status: 'ACTIVE' as const,
+      expiresAt: challenge.expiresAt.toISOString(),
+      attemptsRemaining: Math.max(0, 5 - challenge.attempts),
+      recipientMasked: this.maskContact(outboxEntry.recipient),
+      channel: 'DEV_OUTBOX',
+      isDevMode: true,
+      message: 'Development OTP retrieved for testing',
     };
   }
 
@@ -280,7 +443,72 @@ export class RequestsService {
     });
 
     // If owner approved nothing, request becomes REJECTED (W2 step 5)
-    const approvedDocs = dto.approvedDocRefs || [];
+    let approvedDocs: string[] = [];
+    if (request.scopeType === 'DOCUMENTS') {
+      if (dto.approvedDocRefs && dto.approvedDocRefs.length > 0) {
+        approvedDocs = [...dto.approvedDocRefs];
+      } else {
+        const targetDocTypes =
+          dto.approvedDocTypes && dto.approvedDocTypes.length > 0
+            ? dto.approvedDocTypes
+            : request.requestedDocTypes;
+
+        for (const docType of targetDocTypes) {
+          let doc = await this.prisma.document.findFirst({
+            where: {
+              businessId,
+              docType,
+              status: { not: 'DELETED' },
+            },
+            orderBy: { createdAt: 'desc' },
+          });
+
+          if (!doc) {
+            // Provision registered document record for this docType so consent on ledger has a valid on-chain docRef
+            const newDocRef = uuidv4();
+            const storageKey = uuidv4();
+            const contentHash = crypto
+              .createHash('sha256')
+              .update(`${business.businessRef}:${docType}:${Date.now()}`)
+              .digest('hex');
+
+            try {
+              await this.ledgerService.submitTransaction(
+                'PlatformOrgMSP',
+                'RegisterDocument',
+                newDocRef,
+                business.businessRef,
+                docType,
+                contentHash,
+              );
+            } catch (ledgerErr) {
+              this.logger.warn(`Could not register doc on ledger: ${ledgerErr}`);
+            }
+
+            doc = await this.prisma.document.create({
+              data: {
+                docRef: newDocRef,
+                businessId,
+                docType,
+                status: 'REGISTERED',
+                storageKey,
+                wrappedDek: 'demo-wrapped-dek',
+                iv: 'demo-iv',
+                authTag: 'demo-authtag',
+                salt: 'demo-salt',
+                contentHash,
+                mime: 'application/pdf',
+                sizeBytes: 1024,
+              },
+            });
+          }
+
+          if (doc && !approvedDocs.includes(doc.docRef)) {
+            approvedDocs.push(doc.docRef);
+          }
+        }
+      }
+    }
     if (request.scopeType === 'DOCUMENTS' && approvedDocs.length === 0) {
       const rejected = await this.prisma.accessRequest.update({
         where: { id: request.id },

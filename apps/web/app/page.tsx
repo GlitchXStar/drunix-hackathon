@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const journey = [
   ["01", "Register & secure", "An MSME uploads encrypted business documents."],
   ["02", "Create a share code", "The owner confirms a short-lived profile share code with OTP."],
@@ -19,7 +21,7 @@ export default function Home() {
   return (
     <main>
       <div className="prototype-bar">Prototype · Synthetic data only · NPCI × Drunix Hackathon demonstration</div>
-      <header className="nav"><a className="brand" href="#top"><span className="brand-mark">◒</span>TrustLedger</a><nav><a href="#how">How it works</a><a href="#msmes">For MSMEs</a><a href="#institutions">For institutions</a></nav><a className="button small" href="/login">Sign in <span>→</span></a></header>
+      <header className="nav"><a className="brand" href="#top"><span className="brand-mark">◒</span>TrustLedger</a><nav><a href="#how">How it works</a><a href="#msmes">For MSMEs</a><a href="#institutions">For institutions</a></nav><Link className="button small" href="/login">Sign in <span>→</span></Link></header>
 
       <section className="hero" id="top">
         <video className="hero-video" autoPlay muted loop playsInline poster=""><source src="https://d8j0ntlcm91z4.cloudfront.net/user_38xzZboKViGWJOttwIXH07lWA1P/hf_20260818_072341_50851634-bbc3-4c33-9acc-7647d4db44aa.mp4" type="video/mp4" /></video>
@@ -29,7 +31,7 @@ export default function Home() {
           <p className="eyebrow"><i /> NPCI × Drunix Hackathon · Financial Inclusion</p>
           <h1>Trust, verified once.<br /><em>Shared with consent.</em></h1>
           <p className="lede">TrustLedger lets MSMEs control document sharing, lets institutions verify with confidence, and records consent and attestations on Drunix—without placing personal data on-chain.</p>
-          <div className="actions"><a className="button" href="/register">Create business account <span>→</span></a><a className="button ghost" href="#how">See how consent works <span>↓</span></a></div>
+          <div className="actions"><Link className="button" href="/register">Create business account <span>→</span></Link><a className="button ghost" href="#how">See how consent works <span>↓</span></a></div>
           <div className="chips"><span><b />Consent controlled</span><span><b />Ledger verified</span><span><b />Privacy first</span></div>
         </div>
         <p className="scroll-hint">Scroll to trace the verification journey <span>↓</span></p>
@@ -49,7 +51,7 @@ export default function Home() {
 
       <section className="section faq" aria-labelledby="faq-heading"><div className="section-heading"><p className="kicker">Answers</p><h2 id="faq-heading">Frequently answered<br />questions.</h2></div><div className="faq-list"><details open><summary>What happens when consent expires or is revoked?<span>+</span></summary><p>Future access is denied immediately across all active viewing sessions.</p></details><details><summary>Can an institution download a document?<span>+</span></summary><p>Download requires both an explicit request and the MSME owner&apos;s approval.</p></details><details><summary>What is stored on Drunix?<span>+</span></summary><p>Only minimal pseudonymous consent receipts and attestation references—not raw documents, OTPs or direct personal identifiers.</p></details><details><summary>Is the risk score a lending decision?<span>+</span></summary><p>No. It is synthetic decision support based on structured financial features only.</p></details></div></section>
 
-      <section className="final" id="prototype"><p className="kicker">Prototype walkthrough</p><h2>Build trust without asking<br />MSMEs to start over.</h2><p>See how consent-based sharing can replace repetitive document collection while keeping access controlled and auditable.</p><div className="actions"><a className="button" href="/login">Sign in to your workspace <span>→</span></a><a className="button ghost" href="#security">Read the security model <span>→</span></a></div></section>
+      <section className="final" id="prototype"><p className="kicker">Prototype walkthrough</p><h2>Build trust without asking<br />MSMEs to start over.</h2><p>See how consent-based sharing can replace repetitive document collection while keeping access controlled and auditable.</p><div className="actions"><Link className="button" href="/login">Sign in to your workspace <span>→</span></Link><a className="button ghost" href="#security">Read the security model <span>→</span></a></div></section>
 
       <footer><a className="brand" href="#top"><span className="brand-mark">◒</span>TrustLedger</a><span>NPCI × Drunix Hackathon</span><div><a href="#msmes">MSME journey</a><a href="#institutions">Institution journey</a><a href="#security">Security model</a></div><p>Prototype. Synthetic data only. No claim of production readiness.</p></footer>
     </main>

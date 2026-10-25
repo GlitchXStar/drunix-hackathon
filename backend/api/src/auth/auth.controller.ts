@@ -7,6 +7,7 @@ import {
   Res,
   HttpCode,
   HttpStatus,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -80,8 +81,32 @@ export class AuthController {
   @Get('me')
   @ApiOperation({ summary: 'Get current authenticated user profile' })
   @ApiResponse({ status: 200, description: 'User profile retrieved' })
-  getProfile(@CurrentUser() user: AuthenticatedUser) {
-    return { user };
+  async getProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Req() req: Request,
+  ) {
+    const sessionId = (req as any).session?.sessionId;
+    let csrfToken: string | undefined;
+
+    if (sessionId) {
+      const clientToken = req.headers['x-csrf-token'] as string | undefined;
+      csrfToken = await this.authService.getOrCreateCsrfToken(sessionId, clientToken);
+    }
+
+    return { user, csrfToken };
+  }
+
+  @Get('csrf')
+  @ApiOperation({ summary: 'Get or refresh CSRF token for current session' })
+  @ApiResponse({ status: 200, description: 'CSRF token retrieved' })
+  async getCsrf(@Req() req: Request) {
+    const sessionId = (req as any).session?.sessionId;
+    if (!sessionId) {
+      throw new UnauthorizedException('No active session');
+    }
+    const clientToken = req.headers['x-csrf-token'] as string | undefined;
+    const csrfToken = await this.authService.getOrCreateCsrfToken(sessionId, clientToken);
+    return { csrfToken };
   }
 
   @Post('change-password')

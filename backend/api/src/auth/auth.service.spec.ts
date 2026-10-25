@@ -30,6 +30,8 @@ describe('AuthService', () => {
       serverSession: {
         create: jest.fn(),
         updateMany: jest.fn(),
+        findUnique: jest.fn(),
+        update: jest.fn(),
       },
     };
 
@@ -259,6 +261,57 @@ describe('AuthService', () => {
           'jest-agent',
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getOrCreateCsrfToken', () => {
+    it('should return deterministic CSRF token bound to sessionId', async () => {
+      const expectedToken = service.generateCsrfTokenForSession('sess-uuid-1');
+      const expectedHash = require('crypto').createHash('sha256').update(expectedToken).digest('hex');
+
+      prisma.serverSession.findUnique.mockResolvedValue({
+        id: 'sess-db-id',
+        sessionId: 'sess-uuid-1',
+        csrfTokenHash: expectedHash,
+        revokedAt: null,
+      });
+
+      const token = await service.getOrCreateCsrfToken('sess-uuid-1');
+      expect(token).toBe(expectedToken);
+      expect(prisma.serverSession.update).not.toHaveBeenCalled();
+    });
+
+    it('should update hash in DB if session has legacy or mismatched hash', async () => {
+      const expectedToken = service.generateCsrfTokenForSession('sess-uuid-1');
+
+      prisma.serverSession.findUnique.mockResolvedValue({
+        id: 'sess-db-id',
+        sessionId: 'sess-uuid-1',
+        csrfTokenHash: 'legacy-mismatched-hash',
+        revokedAt: null,
+      });
+      prisma.serverSession.update.mockResolvedValue({});
+
+      const token = await service.getOrCreateCsrfToken('sess-uuid-1');
+      expect(token).toBe(expectedToken);
+      expect(prisma.serverSession.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'sess-db-id' },
+          data: expect.objectContaining({ csrfTokenHash: expect.any(String) }),
+        }),
+      );
+    });
+
+    it('should reject with UnauthorizedException if session is revoked or not found', async () => {
+      prisma.serverSession.findUnique.mockResolvedValue({
+        id: 'sess-db-id',
+        sessionId: 'sess-uuid-1',
+        revokedAt: new Date(),
+      });
+
+      await expect(
+        service.getOrCreateCsrfToken('sess-uuid-1'),
+      ).rejects.toThrow(UnauthorizedException);
     });
   });
 });

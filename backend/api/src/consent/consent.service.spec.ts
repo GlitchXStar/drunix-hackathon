@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OtpPurpose, RequestScopeType, UserRole } from '@prisma/client';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma.service';
@@ -25,6 +26,7 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
   let mockOtp: any;
   let mockNotifications: any;
   let mockLedger: any;
+  let mockConfig: any;
 
   const testBusinessId = 'biz-unit-123';
   const testBusinessRef = 'biz-ref-unit-123';
@@ -149,6 +151,20 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         update: jest.fn().mockResolvedValue({}),
       },
+      otpChallenge: {
+        findUnique: jest.fn(),
+      },
+      devOutbox: {
+        findFirst: jest.fn(),
+      },
+    };
+
+    mockConfig = {
+      get: jest.fn().mockImplementation((key: string) => {
+        if (key === 'DEV_OUTBOX') return '1';
+        if (key === 'NODE_ENV') return 'development';
+        return null;
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -162,6 +178,7 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
         { provide: AuditService, useValue: mockAudit },
         { provide: OtpService, useValue: mockOtp },
         { provide: NotificationsService, useValue: mockNotifications },
+        { provide: ConfigService, useValue: mockConfig },
         { provide: LEDGER_SERVICE, useValue: mockLedger },
       ],
     }).compile();
@@ -174,7 +191,7 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
   });
 
   describe('ShareCodeService', () => {
-    it('should create share-code challenge and issue OTP to business owner', async () => {
+    it('should create share-code challenge and issue OTP to business owner with masked destination and dev mode indicator', async () => {
       const res = await shareCodeService.createShareCodeChallenge(
         testBusinessId,
         testOwnerUserId,
@@ -183,6 +200,10 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
 
       expect(res).toHaveProperty('shareCodeId', 'sharecode-db-123');
       expect(res).toHaveProperty('challengeId', 'test-challenge-uuid');
+      expect(res).toHaveProperty('deliveryChannel', 'DEV_OUTBOX');
+      expect(res).toHaveProperty('deliveryDestinationMasked', '******3210');
+      expect(res).toHaveProperty('isDevMode', true);
+      expect(res.message).toContain('development outbox');
       expect(mockOtp.createChallenge).toHaveBeenCalledWith(
         expect.objectContaining({
           purpose: OtpPurpose.CUSTOMER_APPROVAL,
@@ -194,6 +215,127 @@ describe('Consent & Share-Code Workflow (Stage 5)', () => {
       expect(mockAudit.record).toHaveBeenCalledWith(
         expect.objectContaining({
           action: 'OTP_ISSUED',
+          entityType: 'ProfileShareCode',
+        }),
+      );
+    });
+
+    it('should reject share-code challenge creation if owner has no verified contact details', async () => {
+      mockPrisma.user.findUnique.mockResolvedValueOnce({
+        id: 'no-contact-user',
+        email: '',
+        phone: null,
+      });
+      mockPrisma.business.findUnique.mockResolvedValueOnce({
+        id: testBusinessId,
+        contact: null,
+      });
+
+      await expect(
+        shareCodeService.createShareCodeChallenge(testBusinessId, 'no-contact-user', 60),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should retrieve active development OTP for the current challenge in development mode', async () => {
+      mockPrisma.profileShareCode.findFirst.mockResolvedValue({
+        id: 'sharecode-db-123',
+        businessId: testBusinessId,
+        codeHash: 'PENDING_CONFIRMATION',
+        otpChallengeId: 'challenge-123',
+        usedAt: null,
+      });
+      mockPrisma.otpChallenge.findUnique.mockResolvedValue({
+        id: 'challenge-123',
+        subjectUserId: testOwnerUserId,
+        boundEntityId: 'sharecode-db-123',
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 4 * 60 * 1000),
+        attempts: 1,
+      });
+      mockPrisma.devOutbox.findFirst.mockResolvedValue({
+        recipient: '+919876543210',
+        body: 'TrustLedger OTP for CUSTOMER_APPROVAL: 654321 (Challenge ID: challenge-123)',
+      });
+
+      const devOtp = await shareCodeService.getDevOtpForShareCode(
+        testBusinessId,
+        testOwnerUserId,
+        'sharecode-db-123',
+      );
+
+      expect(devOtp.code).toBe('654321');
+      expect(devOtp.status).toBe('ACTIVE');
+      expect(devOtp.recipientMasked).toBe('******3210');
+      expect(devOtp.attemptsRemaining).toBe(4);
+      expect(devOtp.isDevMode).toBe(true);
+    });
+
+    it('should reject dev OTP retrieval when NODE_ENV is production (server-side gated)', async () => {
+      mockConfig.get.mockImplementation((key: string) => {
+        if (key === 'NODE_ENV') return 'production';
+        if (key === 'DEV_OUTBOX') return '1';
+        return null;
+      });
+
+      await expect(
+        shareCodeService.getDevOtpForShareCode(
+          testBusinessId,
+          testOwnerUserId,
+          'sharecode-db-123',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should reject dev OTP retrieval if caller is not the owner associated with challenge', async () => {
+      mockPrisma.profileShareCode.findFirst.mockResolvedValue({
+        id: 'sharecode-db-123',
+        businessId: testBusinessId,
+        codeHash: 'PENDING_CONFIRMATION',
+        otpChallengeId: 'challenge-123',
+        usedAt: null,
+      });
+      mockPrisma.otpChallenge.findUnique.mockResolvedValue({
+        id: 'challenge-123',
+        subjectUserId: 'other-user-999', // Unrelated user
+        boundEntityId: 'sharecode-db-123',
+        consumedAt: null,
+        expiresAt: new Date(Date.now() + 4 * 60 * 1000),
+        attempts: 0,
+      });
+
+      await expect(
+        shareCodeService.getDevOtpForShareCode(
+          testBusinessId,
+          testOwnerUserId,
+          'sharecode-db-123',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should resend share-code OTP, update challenge ID, and record audit event', async () => {
+      mockPrisma.profileShareCode.findFirst.mockResolvedValue({
+        id: 'sharecode-db-123',
+        businessId: testBusinessId,
+        codeHash: 'PENDING_CONFIRMATION',
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        usedAt: null,
+      });
+      mockOtp.createChallenge.mockResolvedValue({ challengeId: 'new-challenge-456' });
+
+      const res = await shareCodeService.resendShareCodeOtp(
+        testBusinessId,
+        testOwnerUserId,
+        'sharecode-db-123',
+      );
+
+      expect(res.challengeId).toBe('new-challenge-456');
+      expect(mockPrisma.profileShareCode.update).toHaveBeenCalledWith({
+        where: { id: 'sharecode-db-123' },
+        data: { otpChallengeId: 'new-challenge-456' },
+      });
+      expect(mockAudit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'OTP_RESENT',
           entityType: 'ProfileShareCode',
         }),
       );

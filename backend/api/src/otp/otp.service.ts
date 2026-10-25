@@ -97,7 +97,7 @@ export class OtpService {
 
     // 3. Generate 6-digit CSPRNG code
     const rawCode = crypto.randomInt(100000, 1000000).toString();
-    const tempChallengeId = crypto.randomUUID();
+    const tempChallengeId = crypto.randomBytes(12).toString('hex');
     const codeHash = this.computeHash(tempChallengeId, rawCode);
     const expiresAt = new Date(now.getTime() + 5 * 60 * 1000); // 5 minutes
 

@@ -3,6 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import * as cookieParser from 'cookie-parser';
 import * as argon2 from 'argon2';
+import * as crypto from 'crypto';
 import { UserRole, UserStatus, InstitutionStatus } from '@prisma/client';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma.service';
@@ -22,6 +23,12 @@ describe('Auth & Session Flow (e2e)', () => {
 
     prismaMock = {
       user: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      business: {
+        create: jest.fn(),
         findUnique: jest.fn(),
         update: jest.fn(),
       },
@@ -131,4 +138,145 @@ describe('Auth & Session Flow (e2e)', () => {
     expect(res.body.length).toBe(1);
     expect(res.body[0].body).toContain('TrustLedger OTP: 123456');
   });
+
+  it('POST /api/v1/business/register -> successfully registers MSME and owner, sets session cookie', async () => {
+    prismaMock.user.findUnique.mockResolvedValue(null);
+    prismaMock.user.create.mockResolvedValue({
+      id: 'new-owner-id',
+      email: 'owner@newbiz.example.com',
+      phone: '+919422124928',
+      role: UserRole.BUSINESS_OWNER,
+      status: UserStatus.ACTIVE,
+    });
+    prismaMock.business.create.mockResolvedValue({
+      id: 'new-biz-id',
+      businessRef: 'ref-uuid-1234',
+      legalName: 'VIT, Pune',
+      identifiers: JSON.stringify({ gstin: '27AAACA1234A1Z5' }),
+      contact: JSON.stringify({ ownerName: 'Gaurav' }),
+    });
+    prismaMock.user.update.mockResolvedValue({
+      id: 'new-owner-id',
+      businessId: 'new-biz-id',
+    });
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/business/register')
+      .send({
+        ownerName: 'Gaurav',
+        email: 'owner@newbiz.example.com',
+        phone: '+919422124928',
+        password: 'ValidStrongPassword123!',
+        legalName: 'VIT, Pune',
+        gstin: '27AAACA1234A1Z5',
+        businessType: 'Services',
+      })
+      .expect(201);
+
+    expect(res.body).toHaveProperty('user');
+    expect(res.body.user.email).toBe('owner@newbiz.example.com');
+    expect(res.body.user.role).toBe(UserRole.BUSINESS_OWNER);
+    expect(res.body.user.businessId).toBe('new-biz-id');
+    expect(res.body).toHaveProperty('csrfToken');
+    expect(res.headers['set-cookie']).toBeDefined();
+    expect(res.headers['set-cookie'][0]).toContain('trustledger_session=');
+  });
+
+  it('POST /api/v1/business/register -> returns 409 if email already registered', async () => {
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'existing-id',
+      email: 'owner@newbiz.example.com',
+    });
+
+    const res = await request(app.getHttpServer())
+      .post('/api/v1/business/register')
+      .send({
+        ownerName: 'Gaurav',
+        email: 'owner@newbiz.example.com',
+        phone: '+919422124928',
+        password: 'ValidStrongPassword123!',
+        legalName: 'VIT, Pune',
+      })
+      .expect(409);
+
+    expect(res.body.message).toContain('already exists');
+  });
+
+  it('GET /api/v1/auth/me -> returns user profile and active csrfToken', async () => {
+    const testCsrfToken = 'active-test-csrf-token-12345';
+    const testCsrfHash = crypto.createHash('sha256').update(testCsrfToken).digest('hex');
+
+    prismaMock.serverSession.findUnique.mockResolvedValue({
+      id: 'sess-1',
+      sessionId: 'test-session-uuid',
+      userId: 'u-1',
+      status: 'ACTIVE',
+      idleExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      absoluteExpiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
+      csrfTokenHash: testCsrfHash,
+      revokedAt: null,
+    });
+
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u-1',
+      email: 'admin@banka.example.com',
+      role: UserRole.INSTITUTION_ADMIN,
+      status: UserStatus.ACTIVE,
+      institutionId: 'inst-1',
+    });
+
+    prismaMock.institution.findUnique.mockResolvedValue({
+      id: 'inst-1',
+      status: InstitutionStatus.ACTIVE,
+      mspId: 'BankAOrgMSP',
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/auth/me')
+      .set('Cookie', [`trustledger_session=test-session-uuid`])
+      .set('x-csrf-token', testCsrfToken)
+      .expect(200);
+
+    expect(res.body).toHaveProperty('user');
+    expect(res.body.user.email).toBe('admin@banka.example.com');
+    expect(res.body).toHaveProperty('csrfToken');
+  });
+
+  it('GET /api/v1/auth/csrf -> returns or rotates csrfToken for active session', async () => {
+    const testCsrfToken = 'active-test-csrf-token-12345';
+    const testCsrfHash = crypto.createHash('sha256').update(testCsrfToken).digest('hex');
+
+    prismaMock.serverSession.findUnique.mockResolvedValue({
+      id: 'sess-1',
+      sessionId: 'test-session-uuid',
+      userId: 'u-1',
+      status: 'ACTIVE',
+      idleExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      absoluteExpiresAt: new Date(Date.now() + 8 * 60 * 60 * 1000),
+      csrfTokenHash: testCsrfHash,
+      revokedAt: null,
+    });
+
+    prismaMock.user.findUnique.mockResolvedValue({
+      id: 'u-1',
+      email: 'admin@banka.example.com',
+      role: UserRole.INSTITUTION_ADMIN,
+      status: UserStatus.ACTIVE,
+      institutionId: 'inst-1',
+    });
+
+    prismaMock.institution.findUnique.mockResolvedValue({
+      id: 'inst-1',
+      status: InstitutionStatus.ACTIVE,
+      mspId: 'BankAOrgMSP',
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/api/v1/auth/csrf')
+      .set('Cookie', [`trustledger_session=test-session-uuid`])
+      .expect(200);
+
+    expect(res.body).toHaveProperty('csrfToken');
+  });
 });
+

@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "install:all": "npm install && npm run prisma:generate --workspace=@trustledger/api",
+    "dev:api": "npm run start:dev --workspace=@trustledger/api",
+    "dev:web": "npm run dev --workspace=trustledger-frontend",
     "lint": "npm run lint --workspace=@trustledger/api",
     "format": "prettier --write \"backend/api/**/*.{ts,js,json,md}\" \"apps/**/*.{ts,js,json,md}\"",
     "test": "npm run test --workspace=@trustledger/api",

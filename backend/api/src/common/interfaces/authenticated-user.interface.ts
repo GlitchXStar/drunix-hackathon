@@ -6,9 +6,11 @@ export interface AuthenticatedUser {
   role: UserRole;
   status: UserStatus;
   institutionId?: string | null;
+  institutionName?: string | null;
   institutionStatus?: InstitutionStatus | null;
   institutionMspId?: string | null;
   businessId?: string | null;
+  businessName?: string | null;
   mustChangePassword?: boolean;
 }
 

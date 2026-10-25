@@ -1,5 +1,73 @@
-import Link from "next/link";
+"use client";
+
 import AppSidebar from "../../components/AppSidebar";
-const accesses = [["18 Oct 2026 · 10:24 IST", "Bank A", "GST Certificate", "Viewed in session VR-2026-0184", "ACTIVE CONSENT"], ["18 Oct 2026 · 10:17 IST", "Bank A", "Profile attestations", "Share code PSC-9740 redeemed", "PROFILE CONSENT"], ["16 Oct 2026 · 14:03 IST", "Bank A", "Registration Certificate", "Viewed in session VR-2026-0172", "EXPIRED CONSENT"]];
-function Side() { return <AppSidebar role="businessOwner" />; }
-export default function AccessHistoryPage() { return <main className="business-app"><Side /><section className="business-main"><div className="business-prototype">Prototype · synthetic data only · immutable access events</div><header className="business-header"><div><p className="kicker">Business workspace / audit trail</p><h1>Access history</h1><p>Every consented profile or evidence session is recorded here for your review.</p></div></header><section className="access-history-card"><div className="section-card-head"><div><p className="kicker">Recorded events</p><h2>Who accessed what</h2></div><span>3 events</span></div>{accesses.map(([time, institution, item, detail, status]) => <article key={time + item}><time>{time}</time><div><strong>{institution} accessed {item}</strong><p>{detail}</p></div><span className={status === "ACTIVE CONSENT" ? "status registered" : "status expired"}>{status}</span><code>0x9a2...{time.slice(-2)}</code></article>)}<div className="audit-disclosure">Events are logged when access is initiated. This audit history reports TrustLedger session activity; it cannot determine whether an institution retained a permitted copy after download.</div></section></section></main>; }
+import { useAuth, sidebarRole } from "../../lib/auth-context";
+import { useApi } from "../../lib/hooks";
+import * as api from "../../lib/api";
+
+export default function AccessHistoryPage() {
+  const { user } = useAuth();
+  const role = sidebarRole(user?.role || "BUSINESS_OWNER");
+  const { data: consents, loading, error } = useApi(() => api.listBusinessConsents());
+
+  const items = consents || [];
+
+  return (
+    <main className="business-app">
+      <AppSidebar role={role as any} />
+      <section className="business-main">
+        <div className="business-prototype">
+          Prototype · synthetic data only · immutable access events and consent lifecycle
+        </div>
+        <header className="business-header">
+          <div>
+            <p className="kicker">Business workspace / audit trail</p>
+            <h1>Access &amp; consent history</h1>
+            <p>Every consented profile or evidence release is recorded here for your review.</p>
+          </div>
+        </header>
+
+        {error && (
+          <div className="admin-alert" role="alert">
+            <strong>Notice</strong>
+            {error}
+          </div>
+        )}
+
+        <section className="access-history-card">
+          <div className="section-card-head">
+            <div>
+              <p className="kicker">Recorded consent releases</p>
+              <h2>Authorized institution access grants</h2>
+            </div>
+            <span>{loading ? "Loading…" : `${items.length} events`}</span>
+          </div>
+          {items.map((grant) => (
+            <article key={grant.id}>
+              <time>{new Date(grant.createdAt).toLocaleString("en-IN")}</time>
+              <div>
+                <strong>Institution {grant.institutionId || "Bank"} granted {grant.scopeType} access</strong>
+                <p>
+                  Scope: {grant.approvedDocRefs?.join(", ") || "Profile scope only"} · Expires{" "}
+                  {new Date(grant.expiresAt).toLocaleString("en-IN")}
+                </p>
+              </div>
+              <span className={grant.status === "ACTIVE" ? "status registered" : "status expired"}>
+                {grant.status}
+              </span>
+              <code>0x{grant.consentId.replace(/-/g, "").slice(0, 8)}…</code>
+            </article>
+          ))}
+          {!loading && items.length === 0 && (
+            <p style={{ padding: "2rem", textAlign: "center" }}>
+              No access grants recorded yet.
+            </p>
+          )}
+          <div className="audit-disclosure">
+            Events are logged when access is authorized or initiated. This audit history reports TrustLedger session activity; it cannot determine whether an institution retained an authorized copy after download.
+          </div>
+        </section>
+      </section>
+    </main>
+  );
+}

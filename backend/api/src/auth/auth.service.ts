@@ -123,6 +123,7 @@ export class AuthService {
     // Check institution status if user belongs to an institution (I-5)
     let instStatus: InstitutionStatus | null = null;
     let instMspId: string | null = null;
+    let instName: string | null = null;
 
     if (user.institutionId) {
       const institution = await this.prisma.institution.findUnique({
@@ -135,6 +136,16 @@ export class AuthService {
       }
       instStatus = institution.status;
       instMspId = institution.mspId;
+      instName = institution.name;
+    }
+
+    let businessName: string | null = null;
+    if (user.businessId) {
+      const business = await this.prisma.business.findUnique({
+        where: { id: user.businessId },
+        select: { legalName: true },
+      });
+      businessName = business?.legalName || null;
     }
 
     // Reset failed login count and record success
@@ -166,9 +177,11 @@ export class AuthService {
       role: user.role,
       status: user.status,
       institutionId: user.institutionId,
+      institutionName: instName,
       institutionStatus: instStatus,
       institutionMspId: instMspId,
       businessId: user.businessId,
+      businessName,
       mustChangePassword: user.mustChangePassword,
     };
 
@@ -182,6 +195,17 @@ export class AuthService {
   /**
    * Helper to create a new server-side session
    */
+  private getCsrfSecret(): string {
+    return process.env.OTP_PEPPER || process.env.APP_SECRET || 'trustledger-csrf-secret';
+  }
+
+  generateCsrfTokenForSession(sessionId: string): string {
+    return crypto
+      .createHmac('sha256', this.getCsrfSecret())
+      .update(sessionId)
+      .digest('hex');
+  }
+
   async createSession(
     userId: string,
     ip: string,
@@ -189,7 +213,7 @@ export class AuthService {
   ): Promise<{ sessionId: string; csrfToken: string }> {
     const now = new Date();
     const sessionId = crypto.randomUUID();
-    const csrfToken = crypto.randomBytes(32).toString('hex');
+    const csrfToken = this.generateCsrfTokenForSession(sessionId);
     const csrfTokenHash = crypto
       .createHash('sha256')
       .update(csrfToken)
@@ -236,6 +260,34 @@ export class AuthService {
       entityType: 'ServerSession',
       entityId: sessionId,
     });
+  }
+
+  /**
+   * Return the session's bound CSRF token, auto-healing legacy session hashes if needed
+   */
+  async getOrCreateCsrfToken(sessionId: string, _clientToken?: string): Promise<string> {
+    const session = await this.prisma.serverSession.findUnique({
+      where: { sessionId },
+    });
+
+    if (!session || session.revokedAt) {
+      throw new UnauthorizedException('Session not found or revoked');
+    }
+
+    const csrfToken = this.generateCsrfTokenForSession(sessionId);
+    const csrfTokenHash = crypto
+      .createHash('sha256')
+      .update(csrfToken)
+      .digest('hex');
+
+    if (session.csrfTokenHash !== csrfTokenHash) {
+      await this.prisma.serverSession.update({
+        where: { id: session.id },
+        data: { csrfTokenHash },
+      });
+    }
+
+    return csrfToken;
   }
 
   /**

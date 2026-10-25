@@ -78,6 +78,7 @@ export class SessionGuard implements CanActivate {
 
     let instStatus: InstitutionStatus | null = null;
     let instMspId: string | null = null;
+    let instName: string | null = null;
 
     if (user.institutionId) {
       const institution = await this.prisma.institution.findUnique({
@@ -90,6 +91,16 @@ export class SessionGuard implements CanActivate {
       }
       instStatus = institution.status;
       instMspId = institution.mspId;
+      instName = institution.name;
+    }
+
+    let businessName: string | null = null;
+    if (user.businessId) {
+      const business = await this.prisma.business.findUnique({
+        where: { id: user.businessId },
+        select: { legalName: true },
+      });
+      businessName = business?.legalName || null;
     }
 
     // 5. CSRF Token Validation for state-changing requests (§8.2, S-11)
@@ -134,9 +145,11 @@ export class SessionGuard implements CanActivate {
       role: user.role,
       status: user.status,
       institutionId: user.institutionId,
+      institutionName: instName,
       institutionStatus: instStatus,
       institutionMspId: instMspId,
       businessId: user.businessId,
+      businessName,
       mustChangePassword: user.mustChangePassword,
     };
 

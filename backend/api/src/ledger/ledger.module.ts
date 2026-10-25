@@ -4,10 +4,12 @@ import { PrismaService } from '../prisma.service';
 import { LEDGER_SERVICE } from './ledger.interface';
 import { InMemoryLedgerService } from './in-memory-ledger.service';
 import { FabricLedgerService } from './fabric-ledger.service';
+import { LedgerController } from './ledger.controller';
 
 @Global()
 @Module({
   imports: [ConfigModule],
+  controllers: [LedgerController],
   providers: [
     PrismaService,
     InMemoryLedgerService,

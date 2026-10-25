@@ -1,5 +1,89 @@
+"use client";
+
 import Link from "next/link";
+import { useState, useCallback } from "react";
 import AppSidebar from "../../components/AppSidebar";
-const notes=[["New verification request","Bank A requested selected business evidence for loan underwriting and regulatory KYC.","18 Oct 2026 · 10:05 IST","REQUEST"],["Consent is active","Your selected evidence is available to Bank A until 19 Oct 2026 · 10:05 IST.","18 Oct 2026 · 10:14 IST","CONSENT"],["Document viewed","Bank A opened the GST Certificate within session VR-2026-0184.","18 Oct 2026 · 10:24 IST","ACCESS"],["Evidence changed since verified","Registration Certificate version 2 differs from the version last verified.","18 Oct 2026 · 10:31 IST","VERIFICATION"]];
-function Side(){return <AppSidebar role="businessOwner" />;}
-export default function BusinessNotificationsPage(){return <main className="business-app"><Side/><section className="business-main"><div className="business-prototype">Prototype · synthetic data only · notifications contain no document content</div><header className="business-header"><div><p className="kicker">Business workspace / notification center</p><h1>Notifications</h1><p>Stay informed about requests, consents, evidence access and verification changes.</p></div><button className="light-button">Mark all as read</button></header><section className="notification-filters"><button className="active">All <span>4</span></button><button>Requests</button><button>Consents</button><button>Access</button><button>Verification</button></section><section className="notification-list">{notes.map(([title,copy,time,type],index)=><article className={index<2?"unread":""} key={title}><div className="notification-dot"/><div><p className="kicker">{type}</p><strong>{title}</strong><p>{copy}</p><time>{time}</time></div><button>Mark read</button></article>)}</section><section className="notification-note"><p className="kicker">Privacy notice</p><h2>Useful updates without private file contents.</h2><p>Notifications tell you about actions affecting your business. They do not include document pages, OTP values, passwords, or other sensitive contents.</p></section></section></main>}
+import { useAuth, sidebarRole } from "../../lib/auth-context";
+import { useApi } from "../../lib/hooks";
+import * as api from "../../lib/api";
+
+export default function BusinessNotificationsPage() {
+  const { user } = useAuth();
+  const role = sidebarRole(user?.role || "BUSINESS_OWNER");
+  const { data: notifications, loading, error, refetch } = useApi(() => api.listNotifications());
+  const [markingId, setMarkingId] = useState<string | null>(null);
+
+  const handleMarkRead = useCallback(async (id: string) => {
+    setMarkingId(id);
+    try {
+      await api.markNotificationRead(id);
+      refetch();
+    } catch {
+      /* ignore */
+    } finally {
+      setMarkingId(null);
+    }
+  }, [refetch]);
+
+  const items = notifications || [];
+
+  return (
+    <main className="business-app">
+      <AppSidebar role={role as any} />
+      <section className="business-main">
+        <div className="business-prototype">
+          Prototype · synthetic data only · notifications contain no document content
+        </div>
+        <header className="business-header">
+          <div>
+            <p className="kicker">Business workspace / notification center</p>
+            <h1>Notifications</h1>
+            <p>Stay informed about requests, consents, evidence access and verification changes.</p>
+          </div>
+        </header>
+
+        {error && (
+          <div className="admin-alert" role="alert">
+            <strong>Notice</strong>
+            {error}
+          </div>
+        )}
+
+        <section className="notification-list">
+          {items.map((note) => (
+            <article className={!note.read ? "unread" : ""} key={note.id}>
+              <div className="notification-dot" />
+              <div>
+                <p className="kicker">{note.type}</p>
+                <strong>{note.title}</strong>
+                <p>{note.body}</p>
+                <time>{new Date(note.createdAt).toLocaleString("en-IN")}</time>
+              </div>
+              {!note.read && (
+                <button
+                  disabled={markingId === note.id}
+                  onClick={() => handleMarkRead(note.id)}
+                >
+                  {markingId === note.id ? "…" : "Mark read"}
+                </button>
+              )}
+            </article>
+          ))}
+          {!loading && items.length === 0 && (
+            <p style={{ textAlign: "center", padding: "3rem 0", color: "var(--color-muted)" }}>
+              No notifications yet.
+            </p>
+          )}
+        </section>
+
+        <section className="notification-note">
+          <p className="kicker">Privacy notice</p>
+          <h2>Useful updates without private file contents.</h2>
+          <p>
+            Notifications tell you about actions affecting your business. They do not include document pages, OTP values, passwords, or other sensitive contents.
+          </p>
+        </section>
+      </section>
+    </main>
+  );
+}

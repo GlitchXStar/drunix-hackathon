@@ -41,6 +41,16 @@ export class DecideRequestDto {
   approvedDocRefs?: string[];
 
   @ApiPropertyOptional({
+    description: 'Approved document types (alternative/addition to concrete docRefs)',
+    type: [String],
+    example: ['GST_CERTIFICATE'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  approvedDocTypes?: string[];
+
+  @ApiPropertyOptional({
     description: 'Adjusted/shortened consent duration in minutes (max 30 days = 43200)',
     example: 10080,
   })

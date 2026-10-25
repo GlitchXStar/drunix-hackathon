@@ -1,5 +1,131 @@
-import Link from "next/link";
+"use client";
+
+import { useState, useCallback } from "react";
 import AppSidebar from "../../components/AppSidebar";
-const entries = [["VR-2026-0184", "Bank A", "Loan underwriting & regulatory KYC", "2 approved items", "ACTIVE · 21h 42m"], ["VR-2026-0172", "Bank A", "Supplier onboarding", "1 approved item", "EXPIRED"], ["PSC-9740", "Profile code / Bank A", "Profile verification", "Profile attestations", "REDEEMED"]];
-function Side() { return <AppSidebar role="businessOwner" />; }
-export default function ConsentsPage() { return <main className="business-app"><Side /><section className="business-main"><div className="business-prototype">Prototype · synthetic data only · consent is time-limited and revocable</div><header className="business-header"><div><p className="kicker">Business workspace / consent controls</p><h1>Your consents</h1><p>See active access grants, past approvals, and profile-sharing activity.</p></div></header><section className="consent-summary"><article><span>ACTIVE CONSENTS</span><strong>01</strong><p>Bank A can access two selected evidence items until expiry.</p></article><article><span>RECENTLY EXPIRED</span><strong>01</strong><p>Expired access no longer permits new TrustLedger sessions.</p></article><article><span>PROFILE SHARES</span><strong>01</strong><p>A one-time profile code was redeemed by Bank A.</p></article></section><section className="inbox-table consent-table"><div className="section-card-head"><div><p className="kicker">Consent ledger</p><h2>Access grants and outcomes</h2></div><Link href="/business/access-history">View access history →</Link></div><div className="vault-table-wrap"><table className="vault-table"><thead><tr><th>Reference</th><th>Recipient</th><th>Purpose</th><th>Scope</th><th>Status</th><th /></tr></thead><tbody>{entries.map(([id, recipient, purpose, scope, status]) => <tr key={id}><td><strong>{id}</strong></td><td>{recipient}</td><td>{purpose}</td><td>{scope}</td><td><span className={status.startsWith("ACTIVE") ? "status registered" : "status expired"}>{status}</span></td><td>{status.startsWith("ACTIVE") ? <button className="revoke-button">Revoke</button> : <button>View audit</button>}</td></tr>)}</tbody></table></div></section><section className="consent-footer-note"><p className="kicker">Your controls</p><h2>Revocation affects future access.</h2><p>When you revoke an active consent, TrustLedger denies future sessions immediately and records the event. Downloaded copies cannot be recalled.</p></section></section></main>; }
+import { useAuth, sidebarRole } from "../../lib/auth-context";
+import { useApi } from "../../lib/hooks";
+import * as api from "../../lib/api";
+
+export default function ConsentsPage() {
+  const { user } = useAuth();
+  const role = sidebarRole(user?.role || "BUSINESS_OWNER");
+  const { data: consents, loading, error, refetch } = useApi(() => api.listBusinessConsents());
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const handleRevoke = useCallback(async (id: string) => {
+    if (!confirm("Revoke this consent? This will immediately terminate all active sessions and deny future access.")) return;
+    setActionError(null);
+    setRevoking(id);
+    try {
+      await api.revokeConsent(id);
+      refetch();
+    } catch (err: any) {
+      setActionError(err?.message || "Failed to revoke consent.");
+    } finally {
+      setRevoking(null);
+    }
+  }, [refetch]);
+
+  const items = consents || [];
+
+  return (
+    <main className="business-app">
+      <AppSidebar role={role as any} />
+      <section className="business-main">
+        <div className="business-prototype">
+          Prototype · synthetic data only · consent revocation is immediate and logged
+        </div>
+        <header className="business-header">
+          <div>
+            <p className="kicker">Business workspace / consents</p>
+            <h1>Consent grants</h1>
+            <p>Active and historical consent grants given to institutions.</p>
+          </div>
+        </header>
+
+        {(error || actionError) && (
+          <div className="admin-alert" role="alert">
+            <strong>Error</strong>
+            {error || actionError}
+          </div>
+        )}
+
+        <section className="vault-card">
+          <div className="vault-card-head">
+            <div>
+              <p className="kicker">Consent grants</p>
+              <h2>Your consent history</h2>
+            </div>
+            <span className="vault-count">
+              {loading ? "Loading…" : `${items.length} consents`}
+            </span>
+          </div>
+          <div className="vault-table-wrap">
+            <table className="vault-table">
+              <thead>
+                <tr>
+                  <th>Consent</th>
+                  <th>Scope</th>
+                  <th>Status</th>
+                  <th>Expires</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((consent) => (
+                  <tr key={consent.id}>
+                    <td>
+                      <strong>{consent.consentId.slice(0, 8)}…</strong>
+                      <small>
+                        Created {new Date(consent.createdAt).toLocaleDateString("en-IN")}
+                      </small>
+                    </td>
+                    <td>{consent.scopeType}</td>
+                    <td>
+                      <span
+                        className={
+                          consent.status === "ACTIVE"
+                            ? "status registered"
+                            : consent.status === "REVOKED"
+                            ? "status expired"
+                            : "status pending"
+                        }
+                      >
+                        {consent.status}
+                      </span>
+                    </td>
+                    <td>
+                      {consent.expiresAt
+                        ? new Date(consent.expiresAt).toLocaleDateString("en-IN")
+                        : "—"}
+                    </td>
+                    <td>
+                      {consent.status === "ACTIVE" && (
+                        <button
+                          className="light-button"
+                          disabled={revoking === consent.id}
+                          onClick={() => handleRevoke(consent.id)}
+                        >
+                          {revoking === consent.id ? "Revoking…" : "Revoke"}
+                        </button>
+                      )}
+                      {consent.status !== "ACTIVE" && <span>—</span>}
+                    </td>
+                  </tr>
+                ))}
+                {!loading && items.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: "center", padding: "2rem" }}>
+                      No consent grants yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </section>
+    </main>
+  );
+}

@@ -1,4 +1,5 @@
-import { IsNotEmpty, IsString, Length } from 'class-validator';
+import { IsNotEmpty, IsString, MinLength, MaxLength } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RedeemShareCodeDto {
@@ -8,6 +9,13 @@ export class RedeemShareCodeDto {
   })
   @IsNotEmpty()
   @IsString()
-  @Length(8, 8)
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+      : value,
+  )
+  @MinLength(8)
+  @MaxLength(8)
   code: string;
 }
+
